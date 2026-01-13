@@ -403,7 +403,7 @@ void VM::ExtractSpecificVMArgs(dictionary* ini, char*** args, UINT& count)
     char** libPaths = NULL;
     UINT   libPathsCount = 0;
 
-    INI::GetNumberedKeysFromIni(ini, (char*)JAVA_LIBRARY_PATH, &libPaths, libPathsCount, 10);
+    INI::GetNumberedKeysFromIni(ini, (char*)JAVA_LIBRARY_PATH, &libPaths, libPathsCount);
 
     if (libPathsCount > 0) {
 

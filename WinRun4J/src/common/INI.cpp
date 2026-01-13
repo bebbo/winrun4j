@@ -19,29 +19,22 @@ static dictionary* g_ini = NULL;
 
 UINT INI::GetNumberedKeysMax(dictionary* ini, TCHAR* keyName)
 {
-    UINT idx = 0, max = 0;
-    TCHAR entryName[MAX_PATH];
+    // Use the new helper that scans the dictionary once (O(n))
+    int max = dictionary_find_max(ini, keyName);
 
-    while (true) {
-        sprintf_s(entryName, sizeof(entryName), "%s.%d", keyName, idx + 1);
-        TCHAR* entry = iniparser_getstr(ini, entryName);
-        if (idx > 10 && entry == NULL)
-            break;
-        idx++;
-        if (entry)
-            max = idx;
-    }
-    return max;
+    // Preserve original return type and semantics
+    return (max > 0) ? (UINT)max : 0;
 }
 
 void INI::GetNumberedKeysFromIni(dictionary* ini,
                                  const TCHAR* keyName,
                                  TCHAR*** entries,
-                                 UINT& index,
-                                 UINT max)
+                                 UINT& index)
 {
     UINT i = 0;
     TCHAR entryName[MAX_PATH];
+
+    unsigned max = dictionary_find_max(ini, keyName);
 
     while (true)
     {
@@ -80,7 +73,7 @@ void INI::GetNumberedKeysFromIni(dictionary* ini,
         i++;
 
         // Stop after a gap beyond max
-        if (i > max && entry == NULL)
+        if (i > max)
             break;
     }
 

@@ -52,6 +52,7 @@ int iniparser_setstr(dictionary * ini, char * entry, char * val);
 void iniparser_unset(dictionary * ini, char * entry);
 int iniparser_find_entry(dictionary * ini, char * entry) ;
 dictionary * iniparser_load(char * ininame, bool isbuffer = false);
+int dictionary_find_max(dictionary* d, const char* keyName);
 void iniparser_freedict(dictionary * d);
 
 // Strlib 

@@ -492,7 +492,7 @@ int Service::Main(int argc, char* argv[])
     TCHAR** progargs = NULL;
     UINT    progargsCount = 0;
 
-    INI::GetNumberedKeysFromIni(g_ini, PROG_ARG, &progargs, progargsCount, 10);
+    INI::GetNumberedKeysFromIni(g_ini, PROG_ARG, &progargs, progargsCount);
 
     auto freeProgArgs = [&]() {
         if (progargs) {

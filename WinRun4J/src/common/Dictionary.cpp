@@ -570,6 +570,46 @@ dictionary *iniparser_load(char *ininame, bool isbuffer)
     return d;
 }
 
+int dictionary_find_max(dictionary* d, const char* keyName)
+{
+    if (!d || !keyName)
+        return 0;
+
+    int maxIndex = 0;
+    size_t baseLen = strlen(keyName);
+
+    // Iterate over all keys in the dictionary
+    for (int i = 0; i < d->n; i++) {
+        const char* key = d->key[i];
+        if (!key)
+            continue;
+
+        // Must start with keyName + "."
+        if (strncmp(key, keyName, baseLen) != 0)
+            continue;
+        if (key[baseLen] != '.')
+            continue;
+
+        // Extract number after the dot
+        const char* numStr = key + baseLen + 1;
+        if (*numStr == '\0')
+            continue;
+
+        char* end = NULL;
+        long idx = strtol(numStr, &end, 10);
+
+        // Must be a pure integer
+        if (end == numStr || *end != '\0')
+            continue;
+
+        if (idx > maxIndex)
+            maxIndex = (int)idx;
+    }
+printf("maxIndex = %d\n", maxIndex);
+    return maxIndex;
+}
+
+
 void iniparser_freedict(dictionary *d)
 {
     dictionary_del(d);
