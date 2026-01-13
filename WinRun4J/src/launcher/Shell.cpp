@@ -66,19 +66,21 @@ int Shell::CheckSingleInstance(dictionary* ini)
 	char otherModule[MAX_PATH];
 
 	if(Process32First(h, &e)) {
-		HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,	FALSE, e.th32ProcessID);
-		GetModuleFileNameEx(hProcess, 0, otherModule, MAX_PATH);
-		CloseHandle(hProcess);
-		if(thisProcessId != e.th32ProcessID && strcmp(thisModule, otherModule) == 0) {
-			if (dde && DDE::NotifySingleInstance(ini)) {
-				Log::Warning("Single Instance Shutdown");
-				return 1;
+		{
+			HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,	FALSE, e.th32ProcessID);
+			GetModuleFileNameEx(hProcess, 0, otherModule, MAX_PATH);
+			CloseHandle(hProcess);
+			if(thisProcessId != e.th32ProcessID && strcmp(thisModule, otherModule) == 0) {
+				if (dde && DDE::NotifySingleInstance(ini)) {
+					Log::Warning("Single Instance Shutdown");
+					return 1;
+				}
+				if(processOnly) {
+					Log::Warning("Single Instance Shutdown");
+					return 1;
+				}
+				return !EnumWindows(EnumWindowsProcSingleInstance, e.th32ProcessID);
 			}
-			if(processOnly) {
-				Log::Warning("Single Instance Shutdown");
-				return 1;
-			}
-			return !EnumWindows(EnumWindowsProcSingleInstance, e.th32ProcessID);
 		}
 		while(Process32Next(h, &e)) {
 			HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, e.th32ProcessID);

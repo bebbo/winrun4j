@@ -12,43 +12,81 @@
 #include "../common/Log.h"
 #include "../java/JNI.h"
 
+#include <windows.h>
+#include <string.h>
+
 bool EventLog::RegisterNatives(JNIEnv *env)
 {
-	Log::Info("Registering natives for EventLog class");
-	jclass clazz = JNI::FindClass(env, "org/boris/winrun4j/EventLog");
-	if(clazz == NULL) {
-		Log::Warning("Could not find EventLog class");
-		if(env->ExceptionCheck())
-			env->ExceptionClear();
-		return false;
-	}
+    Log::Info("Registering natives for EventLog class");
 
-	JNINativeMethod methods[1];
-	methods[0].fnPtr = (void*) Report;
-	methods[0].name = "report";
-	methods[0].signature = "(Ljava/lang/String;ILjava/lang/String;)Z";
-	env->RegisterNatives(clazz, methods, 1);
-	if(env->ExceptionCheck()) {
-		JNI::PrintStackTrace(env);
-		env->ExceptionClear();
-	}
+    jclass clazz = JNI::FindClass(env, "org/boris/winrun4j/EventLog");
+    if (clazz == NULL) {
+        Log::Warning("Could not find EventLog class");
+        if (env->ExceptionCheck())
+            env->ExceptionClear();
+        return false;
+    }
 
-	return true;
+    JNINativeMethod methods[1];
+    methods[0].name      = (char*)"report";
+    methods[0].signature = (char*)"(Ljava/lang/String;ILjava/lang/String;)Z";
+    methods[0].fnPtr     = (void*)Report;
+
+    env->RegisterNatives(clazz, methods, 1);
+    if (env->ExceptionCheck()) {
+        JNI::PrintStackTrace(env);
+        env->ExceptionClear();
+    }
+
+    return true;
 }
 
-bool EventLog::Report(JNIEnv* env, jobject self, jstring source, jint type, jstring msg)
+bool EventLog::Report(JNIEnv* env, jobject /*self*/, jstring source, jint type, jstring msg)
 {
-	if(source == NULL || msg == NULL)
-		return false;
+    if (source == NULL || msg == NULL)
+        return false;
 
-	jboolean iscopy = false;
-	const char* src = source ? env->GetStringUTFChars(source, &iscopy) : 0;
-	const char* m = msg ? env->GetStringUTFChars(msg, &iscopy) : 0;
+    jboolean isCopySrc = JNI_FALSE;
+    jboolean isCopyMsg = JNI_FALSE;
 
-	HANDLE h = RegisterEventSource(0, src);
-	if(h == NULL) {
-		return false;
-	}
+    const char* src = env->GetStringUTFChars(source, &isCopySrc);
+    if (!src) {
+        return false;
+    }
 
-	return ReportEvent(h, type, 0, 0, 0, 0, strlen(m), 0, (void *) m);
+    const char* m = env->GetStringUTFChars(msg, &isCopyMsg);
+    if (!m) {
+        env->ReleaseStringUTFChars(source, src);
+        return false;
+    }
+
+    HANDLE h = RegisterEventSourceA(NULL, src);
+    if (h == NULL) {
+        env->ReleaseStringUTFChars(source, src);
+        env->ReleaseStringUTFChars(msg, m);
+        return false;
+    }
+
+    // Classic EventLog pattern: one insertion string (m), no binary data.
+    LPCSTR strings[1];
+    strings[0] = m;
+
+    BOOL ok = ReportEventA(
+        h,
+        (WORD)type,   // wType
+        0,            // wCategory
+        0,            // dwEventID
+        NULL,         // lpUserSid
+        1,            // wNumStrings
+        0,            // dwDataSize
+        strings,      // lpStrings
+        NULL          // lpRawData
+    );
+
+    DeregisterEventSource(h);
+
+    env->ReleaseStringUTFChars(source, src);
+    env->ReleaseStringUTFChars(msg, m);
+
+    return ok ? true : false;
 }

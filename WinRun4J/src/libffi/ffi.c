@@ -529,7 +529,6 @@ ffi_prep_incoming_args_SYSV(char *stack, void **rvalue, void **avalue,
    unsigned int  __fun = (unsigned int)(FUN); \
    unsigned int  __ctx = (unsigned int)(CTX); \
    unsigned int  __dis = __fun - (__ctx + 10); \
-   unsigned short __size = (unsigned short)(SIZE); \
    *(unsigned char*) &__tramp[0] = 0xb8; \
    *(unsigned int*)  &__tramp[1] = __ctx; /* movl __ctx, %eax */ \
    *(unsigned char *)  &__tramp[5] = 0xe8; \

@@ -45,7 +45,7 @@ public:
 	int Compare(Version& other);
 	char* GetVersionStr() { return VersionStr; }
 	char* GetRegPath() { return RegPath; }
-	void SetRegPath(char *regPath) { strcpy(RegPath, regPath); }
+	void SetRegPath(char *regPath) { strcpy_s(RegPath, MAX_PATH, regPath); }
 
 private:
 	bool Parsed;

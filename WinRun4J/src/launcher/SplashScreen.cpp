@@ -45,6 +45,7 @@ LRESULT CALLBACK MainWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
 BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam)
 {
+	UNREFERENCED_PARAMETER(lParam);
 	static DWORD currentProcId = GetCurrentProcessId();
 	DWORD procId = 0;
 	GetWindowThreadProcessId(hWnd, &procId);
@@ -294,7 +295,7 @@ extern "C" __declspec(dllexport) void __cdecl SplashScreen_SetText(const char* t
 {
 	if(!g_hWnd) return;
 	g_textSet = true;
-	strcpy(g_text, text);
+	strcpy_s(g_text, sizeof(g_text), text);
 	g_textX = x;
 	g_textY = y;
 	InvalidateRect(g_hWnd, NULL, FALSE);

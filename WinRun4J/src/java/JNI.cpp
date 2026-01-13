@@ -10,380 +10,437 @@
 
 #include "JNI.h"
 #include "../common/Log.h"
+#include "../common/Runtime.h"
 
-// Use to store a reference to our embedded classloader (if required)
-static jclass g_classLoaderClass = NULL;
-static jobject g_classLoader = NULL;
+#include <windows.h>
+#include <string.h>
+#include <stdlib.h>
+
+// Embedded classloader bytecode
+#include "EmbeddedClasses.hpp"
+
+// Global references
+static jclass   g_classLoaderClass = NULL;
+static jobject  g_classLoader      = NULL;
 static jmethodID g_findClassMethod = NULL;
 
-// Cache handles to class class
-static jclass CLASS_CLASS;
-static jmethodID CLASS_GETCTORS_METHOD;
-
-// The java code for the EmbeddedClassLoader - used to load classes
-// from jars embedded inside executabless
-#include "EmbeddedClasses.hpp"
+// Cached java.lang.Class
+static jclass    CLASS_CLASS = NULL;
+static jmethodID CLASS_GETCTORS_METHOD = NULL;
 
 void JNI::Init(JNIEnv* env)
 {
-	// Cache handles to class class
-	jclass c = env->FindClass("java/lang/Class");
-	if(!c) {
-		Log::Error("Could not find Class class");
-		return;
-	}
-	CLASS_CLASS = (jclass) env->NewGlobalRef(c);
-	CLASS_GETCTORS_METHOD = env->GetMethodID(CLASS_CLASS, "getConstructors", "()[Ljava/lang/reflect/Constructor;");
-	if(!CLASS_GETCTORS_METHOD) {
-		Log::Error("Could not find Class.getConstructors method");
-		return;
-	}
+    jclass c = env->FindClass("java/lang/Class");
+    if (!c) {
+        Log::Error("Could not find Class class");
+        return;
+    }
 
-	// Attempt to load the embedded classloader if required
-	LoadEmbeddedClassloader(env);
+    CLASS_CLASS = (jclass)env->NewGlobalRef(c);
+    CLASS_GETCTORS_METHOD =
+        env->GetMethodID(CLASS_CLASS, "getConstructors", "()[Ljava/lang/reflect/Constructor;");
+
+    if (!CLASS_GETCTORS_METHOD) {
+        Log::Error("Could not find Class.getConstructors");
+        return;
+    }
+
+    LoadEmbeddedClassloader(env);
 }
 
 jclass JNI::FindClass(JNIEnv* env, TCHAR* classStr)
 {
-	if(g_classLoader == NULL) {
-		return env->FindClass(classStr);
-	}
+    if (!g_classLoader)
+        return env->FindClass(classStr);
 
-	jclass cl = (jclass) env->CallObjectMethod(g_classLoader, g_findClassMethod, env->NewStringUTF(classStr));
-	// Workaround for bug in sun 1.6 VMs
-	if(cl && CLASS_GETCTORS_METHOD) {
-		env->CallObjectMethod(cl, CLASS_GETCTORS_METHOD);
-	}
-	return cl;
+    jstring jname = env->NewStringUTF(classStr);
+    jclass cl = (jclass)env->CallObjectMethod(g_classLoader, g_findClassMethod, jname);
+
+    if (cl && CLASS_GETCTORS_METHOD)
+        env->CallObjectMethod(cl, CLASS_GETCTORS_METHOD);
+
+    return cl;
 }
 
-/*
-http://java.sun.com/docs/books/jni/html/other.html
- 
-8.2.1 Creating jstrings from Native Strings
-*/
-jstring JNI::JNU_NewStringNative(JNIEnv *env, jclass aStringClass, const char *str)
+jstring JNI::JNU_NewStringNative(JNIEnv *env, jclass stringClass, const char *str)
 {
-     jstring result;
-     jbyteArray bytes = 0;
-     int len;
-     if (env->EnsureLocalCapacity(2) < 0) {
-         return NULL; /* out of memory error */
-     }
-     len = strlen(str);
-     bytes = env->NewByteArray(len);
-     if (bytes != NULL) {
-         env->SetByteArrayRegion(bytes, 0, len, (jbyte *)str);
-         jmethodID MID_String_init = env->GetMethodID(aStringClass,
-                        "<init>", "([B)V");
-         result = (jstring)env->NewObject(aStringClass, MID_String_init, bytes);
-         env->DeleteLocalRef(bytes);
-         return result;
-     } /* else fall through */
-     return NULL;
+    if (!str)
+        return NULL;
+
+    if (env->EnsureLocalCapacity(2) < 0)
+        return NULL;
+
+    int len = (int)strlen(str);
+    jbyteArray bytes = env->NewByteArray(len);
+    if (!bytes)
+        return NULL;
+
+    env->SetByteArrayRegion(bytes, 0, len, (const jbyte*)str);
+
+    jmethodID ctor = env->GetMethodID(stringClass, "<init>", "([B)V");
+    jstring result = (jstring)env->NewObject(stringClass, ctor, bytes);
+
+    env->DeleteLocalRef(bytes);
+    return result;
 }
 
 int JNI::RunMainClass(JNIEnv* env, TCHAR* mainClassStr, int argc, char* argv[])
 {
-	if(!mainClassStr) {
-		Log::Error("No main class specified");
-		return 1;
-	}
+    if (!mainClassStr) {
+        Log::Error("No main class specified");
+        return 1;
+    }
 
-	StrReplace(mainClassStr, '.', '/');
-	jclass mainClass = FindClass(env, mainClassStr);
+    StrReplace(mainClassStr, '.', '/');
 
-	if(mainClass == NULL) {
-		Log::Error("Could not find or initialize main class");
-		return 2;
-	}
-	
-	jobjectArray args = CreateRunArgs(env, argc, argv);
-	if(args == NULL) {
-		Log::Error("Could not create args");
-		return 4;
-	}
+    jclass mainClass = FindClass(env, mainClassStr);
+    if (!mainClass) {
+        Log::Error("Could not find or initialize main class");
+        return 2;
+    }
 
-	jmethodID mainMethod = env->GetStaticMethodID(mainClass, "main", "([Ljava/lang/String;)V");
-	if(mainMethod == NULL) {
-		Log::Error("Could not find main method.");
-		return 8;
-	}
+    jobjectArray args = CreateRunArgs(env, argc, argv);
+    if (!args) {
+        Log::Error("Could not create args");
+        return 4;
+    }
 
-	env->CallStaticVoidMethod(mainClass, mainMethod, args);
+    jmethodID mainMethod =
+        env->GetStaticMethodID(mainClass, "main", "([Ljava/lang/String;)V");
 
-	PrintStackTrace(env);
-	ClearException(env);
+    if (!mainMethod) {
+        Log::Error("Could not find main method");
+        return 8;
+    }
 
-	return 0;
+    env->CallStaticVoidMethod(mainClass, mainMethod, args);
+
+    PrintStackTrace(env);
+    ClearException(env);
+
+    return 0;
 }
 
 char* JNI::CallStringMethod(JNIEnv* env, jclass clazz, jobject obj, char* name)
 {
-	jmethodID methodID = env->GetMethodID(clazz, name, "()Ljava/lang/String;");
-	if(methodID == NULL) {
-		Log::Error("Could not find '%s' method", name);
-		return NULL;
-	}
+    jmethodID mid = env->GetMethodID(clazz, name, "()Ljava/lang/String;");
+    if (!mid) {
+        Log::Error("Could not find '%s' method", name);
+        return NULL;
+    }
 
-	jstring str = (jstring) env->CallObjectMethod(obj, methodID);
-	if(str == NULL) {
-		return NULL;
-	}
+    jstring str = (jstring)env->CallObjectMethod(obj, mid);
+    if (!str)
+        return NULL;
 
-	if(env->ExceptionCheck()) {
-		JNI::PrintStackTrace(env);
-		return NULL;
-	}
+    if (env->ExceptionCheck()) {
+        PrintStackTrace(env);
+        return NULL;
+    }
 
-	jboolean iscopy = false;
-	const char* chars = str ? env->GetStringUTFChars(str, &iscopy) : 0;
-	char* tmp = strdup(chars);
-	env->ReleaseStringUTFChars(str, chars);
-	return tmp;
+    jboolean iscopy = JNI_FALSE;
+    const char* chars = env->GetStringUTFChars(str, &iscopy);
+    if (!chars)
+        return NULL;
+
+    char* out = _strdup(chars);
+    env->ReleaseStringUTFChars(str, chars);
+
+    return out;
 }
 
 const bool JNI::CallBooleanMethod(JNIEnv* env, jclass clazz, jobject obj, char* name)
 {
-	jmethodID methodID = env->GetMethodID(clazz, name, "()Z");
-	if(methodID == NULL) {
-		Log::Error("Could not find '%s' method", name);
-		return NULL;
-	}
+    jmethodID mid = env->GetMethodID(clazz, name, "()Z");
+    if (!mid) {
+        Log::Error("Could not find '%s' method", name);
+        return false;
+    }
 
-	return env->CallBooleanMethod(obj, methodID);
+    return env->CallBooleanMethod(obj, mid);
 }
 
-// Dump stack trace for exception (if present)
 jthrowable JNI::PrintStackTrace(JNIEnv* env)
 {
-	if(!env) return NULL;
-	jthrowable thr = env->ExceptionOccurred();
-	if(thr) {
-		// Print out the stack trace for this exception
-		jclass c = env->FindClass("java/lang/Throwable");
-		jmethodID m = env->GetMethodID(c, "printStackTrace", "()V");
-		if(m) 
-			env->CallVoidMethod(thr, m);
-		else {
-			env->ExceptionClear();
-			m = env->GetMethodID(c, "printStackTrace", "(Ljava/io/PrintStream;)V");
-			jclass sc = env->FindClass("java/lang/System");
-			jfieldID sof = env->GetStaticFieldID(sc, "out", "Ljava/io/PrintStream;");
-			jobject so = env->GetStaticObjectField(sc, sof);
-			env->CallVoidMethod(thr, m, so);
-		}
-		env->ExceptionClear();
-	}
-	return thr;
+    if (!env)
+        return NULL;
+
+    jthrowable thr = env->ExceptionOccurred();
+    if (!thr)
+        return NULL;
+
+    jclass throwable = env->FindClass("java/lang/Throwable");
+    jmethodID print0 = env->GetMethodID(throwable, "printStackTrace", "()V");
+
+    if (print0) {
+        env->CallVoidMethod(thr, print0);
+    } else {
+        env->ExceptionClear();
+        jmethodID print1 =
+            env->GetMethodID(throwable, "printStackTrace", "(Ljava/io/PrintStream;)V");
+
+        jclass sys = env->FindClass("java/lang/System");
+        jfieldID outField = env->GetStaticFieldID(sys, "out", "Ljava/io/PrintStream;");
+        jobject out = env->GetStaticObjectField(sys, outField);
+
+        env->CallVoidMethod(thr, print1, out);
+    }
+
+    env->ExceptionClear();
+    return thr;
 }
 
-// Clear JNI exception
 void JNI::ClearException(JNIEnv* env)
 {
-	if(env && env->ExceptionOccurred()) {
-		env->ExceptionClear();
-	}
+    if (env && env->ExceptionOccurred())
+        env->ExceptionClear();
 }
 
 jobjectArray JNI::ListJars(JNIEnv* env, jobject self, jstring library)
 {
-	HMODULE hm = NULL;
-	if(library) {
-		jboolean iscopy = false;
-		const char* c = library ? env->GetStringUTFChars(library, &iscopy) : 0;
-		hm = LoadLibrary(c);
-		if(!hm)
-			return NULL;
-	}
+    (void)self; // suppress C4100
 
-	int resId = 1;
-	HRSRC hs;
-	while((hs = FindResource(hm, MAKEINTRESOURCE(resId), RT_JAR_FILE)) != NULL) {
-		resId++;
-	}
-	jclass c = env->FindClass("java/lang/String");
-	jobjectArray a = env->NewObjectArray(resId-1, c, 0);
-	for(int i = 1; i < resId; i++) {
-		hs = FindResource(hm, MAKEINTRESOURCE(i), RT_JAR_FILE);
-		HGLOBAL hg = LoadResource(hm, hs);
-		LPBYTE pb = (LPBYTE) LockResource(hg);
-		DWORD* pd = (DWORD*) pb;
-		if(*pd == JAR_RES_MAGIC) {
-			const char* n = (const char *) &pb[RES_MAGIC_SIZE];
-			env->SetObjectArrayElement(a, i-1, env->NewStringUTF(n));
-		}
-	}
-	return a;
+    HMODULE hm = NULL;
+
+    if (library) {
+        jboolean iscopy = JNI_FALSE;
+        const char* lib = env->GetStringUTFChars(library, &iscopy);
+        hm = LoadLibraryA(lib);
+        env->ReleaseStringUTFChars(library, lib);
+        if (!hm)
+            return NULL;
+    }
+
+    int resId = 1;
+    while (FindResourceA(hm, MAKEINTRESOURCEA(resId), RT_JAR_FILE))
+        resId++;
+
+    jclass strClass = env->FindClass("java/lang/String");
+    jobjectArray arr = env->NewObjectArray(resId - 1, strClass, NULL);
+
+    for (int i = 1; i < resId; i++) {
+        HRSRC hs = FindResourceA(hm, MAKEINTRESOURCEA(i), RT_JAR_FILE);
+        if (!hs)
+            continue;
+
+        HGLOBAL hg = LoadResource(hm, hs);
+        BYTE* pb = (BYTE*)LockResource(hg);
+        DWORD* pd = (DWORD*)pb;
+
+        if (*pd == JAR_RES_MAGIC) {
+            const char* name = (const char*)&pb[RES_MAGIC_SIZE];
+            env->SetObjectArrayElement(arr, i - 1, env->NewStringUTF(name));
+        }
+    }
+
+    return arr;
 }
 
 jobject JNI::GetJar(JNIEnv* env, jobject self, jstring library, jstring jarName)
 {
-	HMODULE hm = NULL;
-	if(library) {
-		jboolean iscopy = false;
-		const char* c = library ?env->GetStringUTFChars(library, &iscopy) : 0; 
-		hm = LoadLibrary(c);
-		if(!hm)
-			return NULL;
-	}
+    (void)self; // suppress C4100
 
-	if(!jarName)
-		return NULL;
+    HMODULE hm = NULL;
 
-	jboolean iscopy = false;
-	const char* jn = jarName ? env->GetStringUTFChars(jarName, &iscopy) : 0;
+    if (library) {
+        jboolean iscopy = JNI_FALSE;
+        const char* lib = env->GetStringUTFChars(library, &iscopy);
+        hm = LoadLibraryA(lib);
+        env->ReleaseStringUTFChars(library, lib);
+        if (!hm)
+            return NULL;
+    }
 
-	int resId = 1;
-	HRSRC hs;
-	while((hs = FindResource(hm, MAKEINTRESOURCE(resId), RT_JAR_FILE)) != NULL) {
-		HGLOBAL hg = LoadResource(hm, hs);
-		PBYTE pb = (PBYTE) LockResource(hg);
-		DWORD* pd = (DWORD*) pb;
-		if(*pd == JAR_RES_MAGIC) {
-			int len = strlen((char*) &pb[RES_MAGIC_SIZE]);
-			if(strcmp(jn, (char*) &pb[RES_MAGIC_SIZE]) == 0) {
-				DWORD offset = RES_MAGIC_SIZE + len + 1;
-				DWORD s = SizeofResource(NULL, hs);
-				return env->NewDirectByteBuffer(&pb[offset], s - offset);
-			}
-		}
-		resId++;
-	}
+    if (!jarName)
+        return NULL;
 
-	return NULL;
+    jboolean iscopy = JNI_FALSE;
+    const char* jn = env->GetStringUTFChars(jarName, &iscopy);
+
+    int resId = 1;
+    HRSRC hs;
+
+    while ((hs = FindResourceA(hm, MAKEINTRESOURCEA(resId), RT_JAR_FILE)) != NULL) {
+
+        HGLOBAL hg = LoadResource(hm, hs);
+        BYTE* pb = (BYTE*)LockResource(hg);
+        DWORD* pd = (DWORD*)pb;
+
+        if (*pd == JAR_RES_MAGIC) {
+            const char* stored = (const char*)&pb[RES_MAGIC_SIZE];
+            if (strcmp(jn, stored) == 0) {
+                DWORD nameLen = (DWORD)strlen(stored);
+                DWORD offset = RES_MAGIC_SIZE + nameLen + 1;
+                DWORD total = SizeofResource(NULL, hs);
+
+                jobject buf = env->NewDirectByteBuffer(&pb[offset], total - offset);
+                env->ReleaseStringUTFChars(jarName, jn);
+                return buf;
+            }
+        }
+        resId++;
+    }
+
+    env->ReleaseStringUTFChars(jarName, jn);
+    return NULL;
 }
 
-jclass JNI::DefineClass(JNIEnv* env, const char* filename, const char* name, jobject loader) 
+jclass JNI::DefineClass(JNIEnv* env, const char* filename, const char* name, jobject loader)
 {
-	// Read in file from temp source
-	HANDLE hFile = CreateFile(filename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-	DWORD cbBuffer = GetFileSize(hFile, 0);
-	PBYTE pBuffer = (PBYTE) malloc(cbBuffer);
-	ReadFile(hFile, pBuffer, cbBuffer, &cbBuffer, 0);
-	CloseHandle(hFile);
-	jclass cl = env->DefineClass(name, loader, (const jbyte*) pBuffer, cbBuffer);
-	free(pBuffer);
-	return cl;
+    HANDLE hFile = CreateFileA(filename, GENERIC_READ, FILE_SHARE_READ, NULL,
+                               OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+
+    if (hFile == INVALID_HANDLE_VALUE)
+        return NULL;
+
+    DWORD size = GetFileSize(hFile, NULL);
+    BYTE* buf = (BYTE*)malloc(size);
+
+    DWORD read = 0;
+    ReadFile(hFile, buf, size, &read, NULL);
+    CloseHandle(hFile);
+
+    jclass cl = env->DefineClass(name, loader, (const jbyte*)buf, size);
+    free(buf);
+
+    return cl;
 }
 
 void JNI::LoadEmbeddedClassloader(JNIEnv* env)
 {
-	// First we check if there are any embedded jars
-	if(!FindResource(NULL, MAKEINTRESOURCE(1), RT_JAR_FILE))
-		return;
+    if (!FindResourceA(NULL, MAKEINTRESOURCEA(1), RT_JAR_FILE))
+        return;
 
-	// We need to grab a reference to the system clasloader via the 
-	// ClassLoader.getSystemClassLoader method
-	jclass loaderClass = env->FindClass("java/lang/ClassLoader"); 
-	if(!loaderClass) {
-		Log::Error("Could not access classloader");
-		return;
-	}
+    jclass loaderClass = env->FindClass("java/lang/ClassLoader");
+    if (!loaderClass) {
+        Log::Error("Could not access ClassLoader");
+        return;
+    }
 
-	jmethodID loaderMethod = env->GetStaticMethodID(loaderClass, "getSystemClassLoader", "()Ljava/lang/ClassLoader;");
-	if(!loaderMethod) {
-		Log::Error("Could not access classloader method");
-		return;
-	}
+    jmethodID getSys =
+        env->GetStaticMethodID(loaderClass, "getSystemClassLoader", "()Ljava/lang/ClassLoader;");
 
-	// Grab the system loader and create a global ref
-	jobject loader = env->CallStaticObjectMethod(loaderClass, loaderMethod);
-	loader = env->NewGlobalRef(loader);
+    if (!getSys) {
+        Log::Error("Could not access ClassLoader.getSystemClassLoader");
+        return;
+    }
 
-	// Load class from static memory
-	jclass bb = env->DefineClass("org/boris/winrun4j/classloader/ByteBufferInputStream", loader, (const jbyte*) g_byteBufferISCode, sizeof(g_byteBufferISCode));
-	jclass cl = env->DefineClass("org/boris/winrun4j/classloader/EmbeddedClassLoader", loader, (const jbyte*) g_classLoaderCode, sizeof(g_classLoaderCode));
+    jobject loader = env->CallStaticObjectMethod(loaderClass, getSys);
+    loader = env->NewGlobalRef(loader);
 
-	/*
-	jclass bb = DefineClass(env, "F:/eclipse/workspace/org.boris.winrun4j.classloader/bin/org/boris/winrun4j/classloader/ByteBufferInputStream.class",
-		"org/boris/winrun4j/classloader/ByteBufferInputStream", loader);
-	jclass cl = DefineClass(env, "F:/eclipse/workspace/org.boris.winrun4j.classloader/bin/org/boris/winrun4j/classloader/EmbeddedClassLoader.class",
-		"org/boris/winrun4j/classloader/EmbeddedClassLoader", loader);
-		*/
+    /* jclass bb = */
+    env->DefineClass(
+        "org/boris/winrun4j/classloader/ByteBufferInputStream",
+        loader,
+        (const jbyte*)g_byteBufferISCode,
+        sizeof(g_byteBufferISCode));
 
-	if(!cl) {
-		PrintStackTrace(env);
-		Log::Error("Could not load embedded classloader");
-		return;
-	}
+    jclass cl = env->DefineClass(
+        "org/boris/winrun4j/classloader/EmbeddedClassLoader",
+        loader,
+        (const jbyte*)g_classLoaderCode,
+        sizeof(g_classLoaderCode));
 
-	g_classLoaderClass = (jclass) env->NewGlobalRef(cl);
+    if (!cl) {
+        PrintStackTrace(env);
+        Log::Error("Could not load embedded classloader");
+        return;
+    }
 
-	// Workaround for JDK bug
-	env->CallObjectMethod(g_classLoaderClass, CLASS_GETCTORS_METHOD);
+    g_classLoaderClass = (jclass)env->NewGlobalRef(cl);
 
-	// Now link in native methods
-	JNINativeMethod m[2];
-	m[0].fnPtr = ListJars;
-	m[0].name = "listJars";
-	m[0].signature = "(Ljava/lang/String;)[Ljava/lang/String;";
-	m[1].fnPtr = GetJar;
-	m[1].name = "getJar";
-	m[1].signature = "(Ljava/lang/String;Ljava/lang/String;)Ljava/nio/ByteBuffer;";
-	env->RegisterNatives(g_classLoaderClass, m, 2);
-	if(env->ExceptionCheck()) {
-		Log::Error("Could not register classloader native methods");
-		return;
-	}
+    env->CallObjectMethod(g_classLoaderClass, CLASS_GETCTORS_METHOD);
 
-	jmethodID ctor = env->GetMethodID(g_classLoaderClass, "<init>", "()V");
-	if(!ctor) {
-		Log::Error("Could not access classloader constructor");
-		return;
-	}
+    JNINativeMethod m[2];
+    m[0].name      = (char*)"listJars";
+    m[0].signature = (char*)"(Ljava/lang/String;)[Ljava/lang/String;";
+    m[0].fnPtr     = (void*)ListJars;
 
-	jobject o = env->NewObject(g_classLoaderClass, ctor);
-	if(!o) {
-		PrintStackTrace(env);
-		Log::Error("Could not create classloader instance");
-		return;
-	}
+    m[1].name      = (char*)"getJar";
+    m[1].signature = (char*)"(Ljava/lang/String;Ljava/lang/String;)Ljava/nio/ByteBuffer;";
+    m[1].fnPtr     = (void*)GetJar;
 
-	g_classLoader = env->NewGlobalRef(o);
+    env->RegisterNatives(g_classLoaderClass, m, 2);
 
-	// Grab a reference to the find class method
-	g_findClassMethod = env->GetMethodID(g_classLoaderClass, "findClass", "(Ljava/lang/String;)Ljava/lang/Class;");
-	if(!g_findClassMethod) {
-		PrintStackTrace(env);
-		Log::Error("Could not access find ClassLoader.findClass method");
-		g_classLoader = NULL;
-		return;
-	}
+    if (env->ExceptionCheck()) {
+        Log::Error("Could not register classloader native methods");
+        env->ExceptionClear();
+        return;
+    }
+
+    jmethodID ctor = env->GetMethodID(g_classLoaderClass, "<init>", "()V");
+    if (!ctor) {
+        Log::Error("Could not access classloader constructor");
+        return;
+    }
+
+    jobject o = env->NewObject(g_classLoaderClass, ctor);
+    if (!o) {
+        PrintStackTrace(env);
+        Log::Error("Could not create classloader instance");
+        return;
+    }
+
+    g_classLoader = env->NewGlobalRef(o);
+
+    g_findClassMethod =
+        env->GetMethodID(g_classLoaderClass, "findClass", "(Ljava/lang/String;)Ljava/lang/Class;");
+
+    if (!g_findClassMethod) {
+        PrintStackTrace(env);
+        Log::Error("Could not access findClass");
+        g_classLoader = NULL;
+    }
 }
 
 void JNI::SetContextClassLoader(JNIEnv* env, jobject refObject)
 {
-	jclass threadCls = env->FindClass("java/lang/Thread");
-	jmethodID currentThreadMid = env->GetStaticMethodID(threadCls, "currentThread", "()Ljava/lang/Thread;");
-	jobject currentThread = env->CallStaticObjectMethod(threadCls, currentThreadMid);
-	jmethodID getCtxClsLoaderMid = env->GetMethodID(threadCls, "getContextClassLoader", "()Ljava/lang/ClassLoader;");
-	jobject ctxClassLoader = env->CallObjectMethod(currentThread, getCtxClsLoaderMid);
-	if(ctxClassLoader)
-		return;
-	jclass refCls = env->GetObjectClass(refObject);
-	jmethodID getClsMid = env->GetMethodID(refCls, "getClass", "()Ljava/lang/Class;");
-	jobject clsObj = env->CallObjectMethod(refObject, getClsMid);
-	jclass clsCls = env->GetObjectClass(clsObj);
-	jmethodID getClsLoaderMid = env->GetMethodID(clsCls, "getClassLoader", "()Ljava/lang/ClassLoader;");
-	ctxClassLoader = env->CallObjectMethod(clsObj, getClsLoaderMid);
-	jmethodID setCtxClsLoaderMid = env->GetMethodID(threadCls, "setContextClassLoader", "(Ljava/lang/ClassLoader;)V");
-	env->CallVoidMethod(currentThread, setCtxClsLoaderMid, ctxClassLoader);
+    jclass threadCls = env->FindClass("java/lang/Thread");
+    jmethodID currentThreadMid =
+        env->GetStaticMethodID(threadCls, "currentThread", "()Ljava/lang/Thread;");
+
+    jobject currentThread =
+        env->CallStaticObjectMethod(threadCls, currentThreadMid);
+
+    jmethodID getCtx =
+        env->GetMethodID(threadCls, "getContextClassLoader", "()Ljava/lang/ClassLoader;");
+
+    jobject ctx = env->CallObjectMethod(currentThread, getCtx);
+    if (ctx)
+        return;
+
+    jclass refCls = env->GetObjectClass(refObject);
+    jmethodID getClassMid = env->GetMethodID(refCls, "getClass", "()Ljava/lang/Class;");
+    jobject clsObj = env->CallObjectMethod(refObject, getClassMid);
+
+    jclass clsCls = env->GetObjectClass(clsObj);
+    jmethodID getLoaderMid =
+        env->GetMethodID(clsCls, "getClassLoader", "()Ljava/lang/ClassLoader;");
+
+    jobject loader = env->CallObjectMethod(clsObj, getLoaderMid);
+
+    jmethodID setCtx =
+        env->GetMethodID(threadCls, "setContextClassLoader", "(Ljava/lang/ClassLoader;)V");
+
+    env->CallVoidMethod(currentThread, setCtx, loader);
 }
 
 jobjectArray JNI::CreateRunArgs(JNIEnv *env, int argc, char* argv[])
 {
-	jclass stringClass = env->FindClass("java/lang/String");
-	if(stringClass == NULL) {
-		Log::Error("Could not find String class");
-		return NULL;
-	}
+    jclass stringClass = env->FindClass("java/lang/String");
+    if (!stringClass) {
+        Log::Error("Could not find String class");
+        return NULL;
+    }
 
-	// Create the run args
-	jobjectArray args = env->NewObjectArray(argc, stringClass, NULL);
-	for(int i = 0; i < argc; i++) {
-		env->SetObjectArrayElement(args, i, JNU_NewStringNative(env, stringClass, argv[i]));
-	}
+    jobjectArray arr = env->NewObjectArray(argc, stringClass, NULL);
+    if (!arr)
+        return NULL;
 
-	return args;
+    for (int i = 0; i < argc; i++) {
+        jstring s = JNU_NewStringNative(env, stringClass, argv[i]);
+        env->SetObjectArrayElement(arr, i, s);
+    }
+
+    return arr;
 }

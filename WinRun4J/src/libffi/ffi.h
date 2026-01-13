@@ -58,9 +58,13 @@ extern "C" {
 
 /* Specify which architecture libffi is configured for. */
 #ifdef X64
+#ifndef X86_WIN64
 #define X86_WIN64
+#endif
 #else
+#ifndef X86_WIN32
 #define X86_WIN32
+#endif
 #endif
 
 /* ---- System configuration information --------------------------------- */
@@ -269,6 +273,8 @@ size_t ffi_java_raw_size (ffi_cif *cif);
 
 #ifdef _MSC_VER
 __declspec(align(8))
+#pragma warning(push)
+#pragma warning(disable:4324)
 #endif
 typedef struct {
   char tramp[FFI_TRAMPOLINE_SIZE];
@@ -279,6 +285,9 @@ typedef struct {
 } ffi_closure __attribute__((aligned (8)));
 #else
 } ffi_closure;
+#endif
+#ifdef _MSC_VER
+#pragma warning(pop)
 #endif
 
 void *ffi_closure_alloc (size_t size, void **code);
