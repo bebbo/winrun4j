@@ -308,7 +308,7 @@ void Version::Parse(LPSTR version)
     Parsed = true;
 }
 
-void VM::ExtractSpecificVMArgs(dictionary* ini, TCHAR** args, UINT& count)
+void VM::ExtractSpecificVMArgs(dictionary* ini, char*** args, UINT& count)
 {
     MEMORYSTATUS ms;
     GlobalMemoryStatus(&ms);
@@ -318,69 +318,109 @@ void VM::ExtractSpecificVMArgs(dictionary* ini, TCHAR** args, UINT& count)
 #else
     int overallMax = 1530;
 #endif
+
     int availMax = (int)(ms.dwTotalPhys / 1024 / 1024) - 80;
 
+    auto appendArg = [&](const char* value)
+    {
+        char* dup = _strdup(value);
+        if (!dup)
+            return;
+
+        char** newArr = (char**)realloc(*args, sizeof(char*) * (count + 1));
+        if (!newArr) {
+            free(dup);
+            return;
+        }
+
+        *args = newArr;
+        (*args)[count++] = dup;
+    };
+
+    // ------------------------------------------------------------
+    // Preferred heap size: -XmxNNNm
+    // ------------------------------------------------------------
     char* PreferredHeapSizeStr = iniparser_getstr(ini, (char*)HEAP_SIZE_PREFERRED);
     if (PreferredHeapSizeStr != NULL) {
         int sizeMeg = atoi(PreferredHeapSizeStr);
         if (sizeMeg > availMax)
             sizeMeg = availMax;
 
-        char sizeArg[MAX_PATH];
-        sprintf_s(sizeArg, sizeof(sizeArg), "-Xmx%um", sizeMeg);
-        args[count++] = _strdup(sizeArg);
+        char sizeArg[64];
+        _snprintf_s(sizeArg, sizeof(sizeArg), _TRUNCATE, "-Xmx%um", sizeMeg);
+        appendArg(sizeArg);
     }
 
+    // ------------------------------------------------------------
+    // Max heap size percent: -XmxNNNm
+    // ------------------------------------------------------------
     char* MaxHeapSizePercentStr = iniparser_getstr(ini, (char*)HEAP_SIZE_MAX_PERCENT);
     if (MaxHeapSizePercentStr != NULL && PreferredHeapSizeStr == NULL) {
+
         double percent = atof(MaxHeapSizePercentStr);
         if (percent < 0 || percent > 100) {
             Log::Error("Error with heap size percent. Should be between 0 and 100.");
         } else {
             Log::Info("Percent is: %u", (unsigned int)percent);
             Log::Info("Avail Phys: %dm", availMax);
+
             double size = (percent / 100.0) * (double)availMax;
             if (size > overallMax)
                 size = overallMax;
 
-            char sizeArg[MAX_PATH];
-            sprintf_s(sizeArg, sizeof(sizeArg), "-Xmx%um", (UINT)size);
-            args[count++] = _strdup(sizeArg);
+            char sizeArg[64];
+            _snprintf_s(sizeArg, sizeof(sizeArg), _TRUNCATE, "-Xmx%um", (UINT)size);
+            appendArg(sizeArg);
         }
     }
 
+    // ------------------------------------------------------------
+    // Min heap size percent: -XmsNNNm
+    // ------------------------------------------------------------
     char* MinHeapSizePercentStr = iniparser_getstr(ini, (char*)HEAP_SIZE_MIN_PERCENT);
     if (MinHeapSizePercentStr != NULL) {
+
         double percent = atof(MinHeapSizePercentStr);
         if (percent < 0 || percent > 100) {
             Log::Warning("Error with heap size percent. Should be between 0 and 100.");
         } else {
             Log::Info("Percent is: %f", percent);
             Log::Info("Avail Phys: %dm", availMax);
+
             int size = (int)((percent / 100.0) * (double)availMax);
             if (size > overallMax)
                 size = overallMax;
 
-            char sizeArg[MAX_PATH];
-            sprintf_s(sizeArg, sizeof(sizeArg), "-Xms%um", size);
-            args[count++] = _strdup(sizeArg);
+            char sizeArg[64];
+            _snprintf_s(sizeArg, sizeof(sizeArg), _TRUNCATE, "-Xms%um", size);
+            appendArg(sizeArg);
         }
     }
 
-    char* libPaths[MAX_PATH];
-    UINT  libPathsCount = 0;
-    INI::GetNumberedKeysFromIni(ini, (char*)JAVA_LIBRARY_PATH, libPaths, libPathsCount);
+    // ------------------------------------------------------------
+    // java.library.path entries
+    // ------------------------------------------------------------
+    char** libPaths = NULL;
+    UINT   libPathsCount = 0;
+
+    INI::GetNumberedKeysFromIni(ini, (char*)JAVA_LIBRARY_PATH, &libPaths, libPathsCount, 10);
 
     if (libPathsCount > 0) {
+
         char libPathArg[4096];
         libPathArg[0] = 0;
-        strcat_s(libPathArg, sizeof(libPathArg), "-Djava.library.path=");
+
+        strcpy_s(libPathArg, "-Djava.library.path=");
 
         for (UINT i = 0; i < libPathsCount; i++) {
-            strcat_s(libPathArg, sizeof(libPathArg), libPaths[i]);
-            strcat_s(libPathArg, sizeof(libPathArg), ";");
+            strcat_s(libPathArg, libPaths[i]);
+            strcat_s(libPathArg, ";");
+            free(libPaths[i]);
         }
-        args[count++] = _strdup(libPathArg);
+
+        free(libPaths);
+
+        appendArg(libPathArg);
     }
 }
 

@@ -140,20 +140,26 @@ extern void _cdecl StrTrim(LPSTR str, LPSTR trimChars)
 }
 
 // ------------------------------------------------------------
-// ParseCommandLine
+// ParseCommandLine (dynamic version)
 // ------------------------------------------------------------
-extern void _cdecl ParseCommandLine(LPSTR lpCmdLine, TCHAR** args, UINT& count, bool includeFirst)
+extern void _cdecl ParseCommandLine(
+    LPSTR lpCmdLine,
+    char*** args,      // pointer to dynamic array
+    UINT& count,
+    bool includeFirst)
 {
     if (!lpCmdLine || *lpCmdLine == 0)
         return;
 
-    StrTrim(lpCmdLine, " ");
+    StrTrim(lpCmdLine, (char*)" ");
 
     int len = (int)strlen(lpCmdLine);
     if (len == 0)
         return;
 
-    int startPos[1024], endPos[1024];
+    // Temporary index arrays (max args ~1024)
+    int startPos[1024];
+    int endPos[1024];
     int currentIndex = -1;
 
     bool insideQuotes = false;
@@ -182,14 +188,15 @@ extern void _cdecl ParseCommandLine(LPSTR lpCmdLine, TCHAR** args, UINT& count, 
         }
     }
 
-    if (endPos[currentIndex] < 0)
+    if (currentIndex >= 0 && endPos[currentIndex] < 0)
         endPos[currentIndex] = i;
 
     int index = count;
 
     for (i = includeFirst ? 0 : 1; i <= currentIndex; i++) {
+
         int begin = startPos[i];
-        int end = endPos[i];
+        int end   = endPos[i];
 
         if (lpCmdLine[begin] == '"' && lpCmdLine[end - 1] == '"') {
             begin++;
@@ -197,12 +204,23 @@ extern void _cdecl ParseCommandLine(LPSTR lpCmdLine, TCHAR** args, UINT& count, 
         }
 
         int valueLen = end - begin;
-        if (valueLen > 0) {
-            TCHAR* value = (TCHAR*)malloc((valueLen + 1) * sizeof(TCHAR));
-            memcpy(value, &lpCmdLine[begin], valueLen);
-            value[valueLen] = 0;
-            args[index++] = value;
+        if (valueLen <= 0)
+            continue;
+
+        // Allocate argument string
+        char* value = (char*)malloc(valueLen + 1);
+        memcpy(value, &lpCmdLine[begin], valueLen);
+        value[valueLen] = 0;
+
+        // Grow args array
+        char** newArgs = (char**)realloc(*args, sizeof(char*) * (index + 1));
+        if (!newArgs) {
+            free(value);
+            return;
         }
+
+        *args = newArgs;
+        (*args)[index++] = value;
     }
 
     count = index;

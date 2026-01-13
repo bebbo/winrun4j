@@ -240,12 +240,13 @@ int Service::Run(HINSTANCE /*hInstance*/, dictionary* ini, int argc, char* argv[
 }
 
 // Command line: "--WinRun4J:RegisterService"
+// Command line: "--WinRun4J:RegisterService"
 int Service::Register(dictionary* ini)
 {
     Log::Info("Registering Service...");
 
     g_serviceId = iniparser_getstr(ini, (char*)SERVICE_ID);
-    if (g_serviceId == NULL) {
+    if (!g_serviceId) {
         Log::Error("Service ID not specified");
         return 1;
     }
@@ -264,67 +265,68 @@ int Service::Register(dictionary* ini)
 
     DWORD startupMode = SERVICE_DEMAND_START;
     char* startup = iniparser_getstr(ini, (char*)SERVICE_STARTUP);
-    if (startup != NULL) {
-        if (strcmp(startup, "auto") == 0) {
-            startupMode = SERVICE_AUTO_START;
-            Log::Info("Service startup mode: SERVICE_AUTO_START");
-        } else if (strcmp(startup, "boot") == 0) {
-            startupMode = SERVICE_BOOT_START;
-            Log::Info("Service startup mode: SERVICE_BOOT_START");
-        } else if (strcmp(startup, "demand") == 0) {
-            startupMode = SERVICE_DEMAND_START;
-            Log::Info("Service startup mode: SERVICE_DEMAND_START");
-        } else if (strcmp(startup, "disabled") == 0) {
-            startupMode = SERVICE_DISABLED;
-            Log::Info("Service startup mode: SERVICE_DISABLED");
-        } else if (strcmp(startup, "system") == 0) {
-            startupMode = SERVICE_SYSTEM_START;
-            Log::Info("Service startup mode: SERVICE_SYSTEM_START");
-        } else {
-            Log::Warning("Unrecognized service startup mode: %s", startup);
-        }
+    if (startup) {
+        if      (strcmp(startup, "auto")     == 0) startupMode = SERVICE_AUTO_START;
+        else if (strcmp(startup, "boot")     == 0) startupMode = SERVICE_BOOT_START;
+        else if (strcmp(startup, "demand")   == 0) startupMode = SERVICE_DEMAND_START;
+        else if (strcmp(startup, "disabled") == 0) startupMode = SERVICE_DISABLED;
+        else if (strcmp(startup, "system")   == 0) startupMode = SERVICE_SYSTEM_START;
+        else Log::Warning("Unrecognized service startup mode: %s", startup);
     }
 
     // Dependencies
-    TCHAR* dependencies[MAX_PATH];
-    UINT   depCount = 0;
-    INI::GetNumberedKeysFromIni(ini, (char*)SERVICE_DEPENDENCY, dependencies, depCount);
+    TCHAR** dependencies = NULL;
+    UINT depCount = 0;
 
-    TCHAR* depList     = NULL;
-    int    depListSize = 0;
+    auto freeDependencies = [&]() {
+        if (dependencies) {
+            for (UINT i = 0; i < depCount; i++)
+                free(dependencies[i]);
+            free(dependencies);
+            dependencies = NULL;
+        }
+    };
 
-    for (UINT i = 0; i < depCount; i++) {
+    TCHAR* depList = NULL;
+
+    auto freeDepList = [&]() {
+        if (depList) {
+            free(depList);
+            depList = NULL;
+        }
+    };
+
+    INI::GetNumberedKeysFromIni(ini, SERVICE_DEPENDENCY, &dependencies, depCount);
+
+    int depListSize = 0;
+    for (UINT i = 0; i < depCount; i++)
         depListSize += (int)strlen(dependencies[i]) + 1;
-    }
     depListSize++;
 
-    if (depListSize > 0 && depCount > 0) {
+    if (depCount > 0) {
         depList = (TCHAR*)malloc(depListSize);
         if (!depList) {
             Log::Error("Could not create dependency list");
+            freeDependencies();
             return 1;
         }
 
-        TCHAR* depPointer = depList;
+        TCHAR* p = depList;
         for (UINT i = 0; i < depCount; i++) {
             size_t len = strlen(dependencies[i]);
-            memcpy(depPointer, dependencies[i], len);
-            depPointer += len;
-            *depPointer++ = 0;
+            memcpy(p, dependencies[i], len);
+            p += len;
+            *p++ = 0;
         }
-        *depPointer = 0;
+        *p = 0;
     }
 
     char* loadOrderGroup = iniparser_getstr(ini, (char*)SERVICE_LOAD_ORDER_GROUP);
-
     char* user = iniparser_getstr(ini, (char*)SERVICE_USER);
     char* pwd  = iniparser_getstr(ini, (char*)SERVICE_PWD);
 
     CHAR path[MAX_PATH];
-    CHAR quotePath[MAX_PATH];
-
-    quotePath[0] = '"';
-    quotePath[1] = 0;
+    CHAR quotePath[MAX_PATH] = "\"";
 
     GetModuleFileNameA(NULL, path, MAX_PATH);
     strcat_s(quotePath, sizeof(quotePath), path);
@@ -334,7 +336,8 @@ int Service::Register(dictionary* ini)
     if (!hScm) {
         DWORD error = GetLastError();
         Log::Error("Could not access service manager: %d", error);
-        if (depList) free(depList);
+        freeDepList();
+        freeDependencies();
         return (int)error;
     }
 
@@ -356,19 +359,22 @@ int Service::Register(dictionary* ini)
 
     if (!hSvc) {
         DWORD error = GetLastError();
-        if (error == ERROR_SERVICE_EXISTS) {
+        if (error == ERROR_SERVICE_EXISTS)
             Log::Warning("Service already exists");
-        } else {
+        else
             Log::Error("Could not create service: %d", error);
-        }
+
         CloseServiceHandle(hScm);
-        if (depList) free(depList);
+        freeDepList();
+        freeDependencies();
         return (int)error;
     }
 
     CloseServiceHandle(hSvc);
     CloseServiceHandle(hScm);
-    if (depList) free(depList);
+
+    freeDepList();
+    freeDependencies();
 
     // Add description
     CHAR regPath[MAX_PATH];
@@ -377,14 +383,9 @@ int Service::Register(dictionary* ini)
 
     HKEY key;
     if (RegOpenKeyA(HKEY_LOCAL_MACHINE, regPath, &key) == ERROR_SUCCESS) {
-        RegSetValueExA(
-            key,
-            "Description",
-            0,
-            REG_SZ,
-            (const BYTE*)description,
-            (DWORD)(strlen(description) + 1)
-        );
+        RegSetValueExA(key, "Description", 0, REG_SZ,
+                       (const BYTE*)description,
+                       (DWORD)(strlen(description) + 1));
         RegCloseKey(key);
     } else {
         Log::Warning("Could not open registry key to set description");
@@ -485,62 +486,108 @@ int Service::Main(int argc, char* argv[])
     if (!env)
         return 1;
 
-    // INI args
-    TCHAR* progargs[MAX_PATH];
-    UINT   progargsCount = 0;
-    INI::GetNumberedKeysFromIni(g_ini, (char*)PROG_ARG, progargs, progargsCount);
+    // ------------------------------------------------------------
+    // Load INI args dynamically
+    // ------------------------------------------------------------
+    TCHAR** progargs = NULL;
+    UINT    progargsCount = 0;
 
+    INI::GetNumberedKeysFromIni(g_ini, PROG_ARG, &progargs, progargsCount, 10);
+
+    auto freeProgArgs = [&]() {
+        if (progargs) {
+            for (UINT i = 0; i < progargsCount; i++)
+                free(progargs[i]);
+            free(progargs);
+            progargs = NULL;
+        }
+    };
+
+    // ------------------------------------------------------------
+    // Prepare Java String[] args
+    // ------------------------------------------------------------
     jclass stringClass = env->FindClass("java/lang/String");
     if (!stringClass) {
         Log::Error("Could not find java/lang/String");
         if (env->ExceptionCheck()) env->ExceptionClear();
+        freeProgArgs();
         return 1;
     }
 
-    jint totalArgs = (jint)(argc - 1 + progargsCount);
+    jint totalArgs = (jint)(progargsCount + (argc - 1));
     jobjectArray jargs = env->NewObjectArray(totalArgs, stringClass, NULL);
     if (!jargs) {
         Log::Error("Could not allocate argument array");
         if (env->ExceptionCheck()) env->ExceptionClear();
+        freeProgArgs();
         return 1;
     }
 
+    // ------------------------------------------------------------
+    // Fill INI args
+    // ------------------------------------------------------------
     for (UINT i = 0; i < progargsCount; i++) {
         jstring s = env->NewStringUTF(progargs[i]);
         env->SetObjectArrayElement(jargs, (jsize)i, s);
+
         if (env->ExceptionCheck()) {
             env->ExceptionDescribe();
             env->ExceptionClear();
+            freeProgArgs();
             return 1;
         }
     }
 
+    // ------------------------------------------------------------
+    // Fill SCM args (skip argv[0])
+    // ------------------------------------------------------------
     for (int i = 0; i < argc - 1; i++) {
         jstring s = env->NewStringUTF(argv[i + 1]);
         env->SetObjectArrayElement(jargs, (jsize)(progargsCount + i), s);
+
         if (env->ExceptionCheck()) {
             env->ExceptionDescribe();
             env->ExceptionClear();
+            freeProgArgs();
             return 1;
         }
     }
 
-    jargs = (jobjectArray)env->NewGlobalRef(jargs);
+    // We no longer need progargs
+    freeProgArgs();
+
+    // ------------------------------------------------------------
+    // Promote to global ref for use in service thread
+    // ------------------------------------------------------------
+    jobjectArray globalArgs = (jobjectArray)env->NewGlobalRef(jargs);
+    if (!globalArgs) {
+        Log::Error("Could not create global ref for args");
+        return 1;
+    }
 
     Log::Info("Service startup initiated with %u INI args and %d Ctrl Manager args",
               progargsCount, argc - 1);
 
+    // ------------------------------------------------------------
+    // Prepare service state and thread
+    // ------------------------------------------------------------
     g_event = CreateEventA(NULL, TRUE, FALSE, NULL);
 
     g_serviceStatus.dwCurrentState = SERVICE_RUNNING;
     SetServiceStatus(g_serviceStatusHandle, &g_serviceStatus);
 
-    CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)ServiceMainThread, jargs, 0, NULL);
+    CreateThread(NULL, 0,
+                 (LPTHREAD_START_ROUTINE)ServiceMainThread,
+                 globalArgs,
+                 0, NULL);
 
+    // Wait for Java service thread to attach
     WaitForSingleObject(g_event, INFINITE);
 
-    env->DeleteGlobalRef(jargs);
+    // Cleanup JNI global reference
+    env->DeleteGlobalRef(globalArgs);
 
+    // Detach launcher thread
     VM::DetachCurrentThread();
 
     return 0;

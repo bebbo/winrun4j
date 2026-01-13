@@ -30,10 +30,10 @@
 
 namespace
 {
-    char* vmargs[MAX_PATH];
+    char** vmargs = NULL;
     UINT  vmargsCount = 0;
 
-    char* progargs[MAX_PATH];
+    char** progargs = NULL;
     UINT  progargsCount  = 0;
     UINT  progargsOffset = 0;
 
@@ -179,11 +179,11 @@ int WinRun4J::StartVM(dictionary* ini)
 
     Log::Info("Found VM: %s", vmlibrary);
 
-    INI::GetNumberedKeysFromIni(ini, (char*)VM_ARG, vmargs, vmargsCount);
+    INI::GetNumberedKeysFromIni(ini, VM_ARG, &vmargs, vmargsCount);
 
-    Classpath::BuildClassPath(ini, vmargs, vmargsCount);
+    Classpath::BuildClassPath(ini, &vmargs, vmargsCount);
 
-    VM::ExtractSpecificVMArgs(ini, vmargs, vmargsCount);
+    VM::ExtractSpecificVMArgs(ini, &vmargs, vmargsCount);
 
     if (vmargsCount > 0)
         Log::Info("VM Args:");
@@ -216,13 +216,14 @@ void WinRun4J::FreeArgs()
         free(vmargs[i]);
         vmargs[i] = NULL;
     }
-
-    for (UINT i = 0; i < progargsCount; i++) {
-        free(progargs[i]);
-        progargs[i] = NULL;
-    }
-
+    free(vmargs);
     vmargsCount   = 0;
+
+    for (UINT i = 0; i < progargsCount; i++)
+        free(progargs[i]);
+
+    free(progargs);
+    progargs = NULL;
     progargsCount = 0;
 }
 
@@ -323,9 +324,9 @@ int WinRun4J::ExecuteINI(HINSTANCE hInstance, dictionary* ini)
     }
 #endif
 
-    char* argv[MAX_PATH];
+    TCHAR** argv = NULL;
     UINT  argc = 0;
-    INI::GetNumberedKeysFromIni(ini, (char*)":arg", argv, argc);
+    INI::GetNumberedKeysFromIni(ini, ":arg", &argv, argc);
 
     if (serviceMode)
         result = Service::Run(hInstance, ini, (int)argc, argv);
@@ -367,7 +368,7 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPSTR lp
 
     Log::Init(hInstance, NULL, NULL, NULL);
 
-    ParseCommandLine(lpCmdLine, progargs, progargsCount, true);
+    ParseCommandLine(lpCmdLine, &progargs, progargsCount, true);
 
     if (progargsCount && strncmp(progargs[0], "--WinRun4J:", 11) == 0) {
         int res = WinRun4J::DoBuiltInCommand(hInstance);

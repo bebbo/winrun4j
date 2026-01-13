@@ -34,7 +34,7 @@
 class INI
 {
 public:
-	static void GetNumberedKeysFromIni(dictionary* ini, TCHAR* keyName, TCHAR** entries, UINT& index, UINT max = 10);
+	static void GetNumberedKeysFromIni(dictionary* ini, const TCHAR* keyName, TCHAR*** entries, UINT& index, UINT max = 0x7fffff);
 	static UINT GetNumberedKeysMax(dictionary* ini, TCHAR* keyName);
 	static void SetNumberedKeys(dictionary* ini, TCHAR* keyName, TCHAR** entries, UINT count); 
 	static dictionary* LoadIniFile(HINSTANCE hInstance);

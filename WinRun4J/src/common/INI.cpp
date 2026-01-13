@@ -34,23 +34,63 @@ UINT INI::GetNumberedKeysMax(dictionary* ini, TCHAR* keyName)
     return max;
 }
 
-void INI::GetNumberedKeysFromIni(dictionary* ini, TCHAR* keyName, TCHAR** entries, UINT& index, UINT max)
+void INI::GetNumberedKeysFromIni(dictionary* ini,
+                                 const TCHAR* keyName,
+                                 TCHAR*** entries,
+                                 UINT& index,
+                                 UINT max)
 {
     UINT i = 0;
     TCHAR entryName[MAX_PATH];
 
-    while (true) {
-        sprintf_s(entryName, sizeof(entryName), "%s.%d", keyName, i + 1);
+    while (true)
+    {
+        // Build key: keyName.N
+#ifdef UNICODE
+    	_snwprintf_s(entryName, MAX_PATH, _TRUNCATE, L"%s.%u", keyName, i + 1);
+#else
+    	_snprintf_s(entryName, MAX_PATH, _TRUNCATE, "%s.%u", keyName, i + 1);
+#endif
+
         TCHAR* entry = iniparser_getstr(ini, entryName);
-        if (entry != NULL) {
-            entries[index++] = _strdup(entry);
+
+        if (entry != NULL)
+        {
+            // Duplicate the string
+#ifdef UNICODE
+            TCHAR* dup = _wcsdup(entry);
+#else
+            TCHAR* dup = _strdup(entry);
+#endif
+            if (!dup)
+                return;
+
+            // Grow array
+            TCHAR** newArr = (TCHAR**)realloc(*entries, sizeof(TCHAR*) * (index + 1));
+            if (!newArr)
+            {
+                free(dup);
+                return;
+            }
+
+            *entries = newArr;
+            (*entries)[index++] = dup;
         }
+
         i++;
-        if (i > max && entry == NULL) {
+
+        // Stop after a gap beyond max
+        if (i > max && entry == NULL)
             break;
-        }
     }
-    entries[index] = NULL;
+
+    // NULL-terminate the array
+    TCHAR** newArr = (TCHAR**)realloc(*entries, sizeof(TCHAR*) * (index + 1));
+    if (!newArr)
+        return;
+
+    *entries = newArr;
+    (*entries)[index] = NULL;
 }
 
 void INI::SetNumberedKeys(dictionary* ini, TCHAR* keyName, TCHAR** entries, UINT count)

@@ -22,16 +22,8 @@ namespace
     bool g_classpathMaxWarned = false;
 }
 
-static void ExpandClassPathEntry(char* arg, char** result, int* current, int max)
+static void ExpandClassPathEntry(char* arg, char*** result, int* count)
 {
-    if (*current >= max) {
-        if (!g_classpathMaxWarned) {
-            Log::Warning("Exceeded maximum classpath size");
-            g_classpathMaxWarned = true;
-        }
-        return;
-    }
-
     Log::Info("Expanding Classpath: %s", arg);
 
     char fullpath[MAX_PATH];
@@ -44,19 +36,35 @@ static void ExpandClassPathEntry(char* arg, char** result, int* current, int max
     if (strchr(arg, '*') == NULL) {
         HANDLE h = FindFirstFileA(fullpath, &fd);
         if (h != INVALID_HANDLE_VALUE) {
-            result[*current] = _strdup(fullpath);
-            (*current)++;
+
+            char* dup = _strdup(fullpath);
+            if (!dup) {
+                FindClose(h);
+                return;
+            }
+
+            char** newArr = (char**)realloc(*result, sizeof(char*) * (*count + 1));
+            if (!newArr) {
+                free(dup);
+                FindClose(h);
+                return;
+            }
+
+            *result = newArr;
+            (*result)[(*count)++] = dup;
+
             FindClose(h);
             return;
         }
     }
 
-    int len = (int)strlen(fullpath);
+    int len  = (int)strlen(fullpath);
     int prev = 0;
     bool hasStar = false;
     char search[MAX_PATH];
 
     for (int i = 0; i <= len; i++) {
+
         if (fullpath[i] == '/' || fullpath[i] == '\\' || fullpath[i] == 0) {
 
             if (hasStar) {
@@ -95,7 +103,7 @@ static void ExpandClassPathEntry(char* arg, char** result, int* current, int max
                         }
                     }
 
-                    ExpandClassPathEntry(search, result, current, max);
+                    ExpandClassPathEntry(search, result, count);
 
                 } while (FindNextFileA(h, &fd));
 
@@ -113,38 +121,43 @@ static void ExpandClassPathEntry(char* arg, char** result, int* current, int max
     }
 }
 
-void Classpath::BuildClassPath(dictionary* ini, TCHAR** args, UINT& count)
+void Classpath::BuildClassPath(dictionary* ini, char*** args, UINT& count)
 {
-    TCHAR currentDir[MAX_PATH];
+    char currentDir[MAX_PATH];
     char* workingDirectory = iniparser_getstr(ini, (char*)WORKING_DIR);
 
+    // Temporarily switch to INI directory if no working directory is set
     if (!workingDirectory) {
         GetCurrentDirectoryA(MAX_PATH, currentDir);
         SetCurrentDirectoryA(iniparser_getstr(ini, (char*)INI_DIR));
     }
 
-    char* entries[MAX_PATH];
-    int index = 0;
+    // Dynamic list of expanded classpath entries
+    char** entries = NULL;
+    int    entryCount = 0;
 
     char entryName[MAX_PATH];
     int i = 0;
 
     while (true) {
-        sprintf_s(entryName, "%s.%d", CLASS_PATH, i + 1);
+        _snprintf_s(entryName, MAX_PATH, _TRUNCATE, "%s.%d", CLASS_PATH, i + 1);
         char* entry = iniparser_getstr(ini, entryName);
 
         if (entry != NULL) {
-            ExpandClassPathEntry(entry, entries, &index, MAX_PATH);
+            // Expand wildcards -> produces multiple entries
+            ExpandClassPathEntry(entry, &entries, &entryCount);
         }
 
         i++;
-        if (i > 10 && entry == NULL)
+        if (entry == NULL)
             break;
     }
 
+    // Build final classpath string
     char* classpath = NULL;
 
-    for (int j = 0; j < index; j++) {
+    for (int j = 0; j < entryCount; j++) {
+
         size_t newLen =
             (classpath ? strlen(classpath) + 1 : 0) +
             strlen(entries[j]) + 1;
@@ -164,22 +177,36 @@ void Classpath::BuildClassPath(dictionary* ini, TCHAR** args, UINT& count)
         free(entries[j]);
     }
 
+    free(entries);
+
     char* built = _strdup(classpath ? classpath : "");
     free(classpath);
 
+    // Log truncated classpath
     char argl[MAX_LOG_LENGTH - 100];
     StrTruncate(argl, built, MAX_LOG_LENGTH - 100);
     Log::Info("Generated Classpath: %s", argl);
 
+    // Build final -cp argument
     size_t cpLen = strlen(built) + strlen(CLASS_PATH_ARG) + 2;
     char* cpArg = (char*)malloc(cpLen);
     strcpy_s(cpArg, cpLen, CLASS_PATH_ARG);
     strcat_s(cpArg, cpLen, built);
 
-    args[count++] = cpArg;
+    // Append to args (dynamic)
+    char** newArgs = (char**)realloc(*args, sizeof(char*) * (count + 1));
+    if (!newArgs) {
+        free(cpArg);
+        free(built);
+        return;
+    }
+
+    *args = newArgs;
+    (*args)[count++] = cpArg;
 
     free(built);
 
+    // Restore working directory
     if (!workingDirectory) {
         SetCurrentDirectoryA(currentDir);
     }
