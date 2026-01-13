@@ -75,10 +75,11 @@ set(RCEDIT_COMMON
 )
 
 # ------------------------------------------------------------
-# libffi assembly
+# libffi assembly (serialized, MASM via asm.bat)
 # ------------------------------------------------------------
 enable_language(ASM_MASM)
 
+# Select arch-specific sources and outputs
 if(CMAKE_SIZEOF_VOID_P EQUAL 4)
     set(FFI_ASM_SRC ${CMAKE_SOURCE_DIR}/src/libffi/win32.S)
     set(FFI_ASM_BAT ${CMAKE_SOURCE_DIR}/src/libffi/asm.bat)
@@ -91,6 +92,11 @@ else()
     set(FFI_ARCH win64)
 endif()
 
+# Define a job pool that only allows 1 job at a time for libffi asm
+# This prevents concurrent asm.bat/ml.exe runs which corrupt win32.asm/obj
+set_property(GLOBAL PROPERTY JOB_POOLS "ffi_asm_pool=1")
+
+# Custom command: runs your asm.bat to generate the .obj file
 add_custom_command(
     OUTPUT ${FFI_ASM_OBJ}
     COMMAND ${FFI_ASM_BAT}
@@ -102,6 +108,14 @@ add_custom_command(
     COMMENT "Assembling libffi ${FFI_ARCH} backend"
 )
 
+# Custom target that represents "the libffi asm object exists"
+add_custom_target(ffi_asm ALL
+    DEPENDS ${FFI_ASM_OBJ}
+)
+
+# Force this target (and thus the asm.bat/ml.exe step) into the serial pool
+set_property(TARGET ffi_asm PROPERTY JOB_POOL_COMPILE ffi_asm_pool)
+set_property(TARGET ffi_asm PROPERTY JOB_POOL_LINK    ffi_asm_pool)
 
 # ------------------------------------------------------------
 # Helper: create launcher variants
@@ -130,6 +144,9 @@ function(add_launcher name subsystem)
     else()
         target_compile_definitions(${name} PRIVATE X86_WIN64)
     endif()
+    
+	target_sources(${name} PRIVATE ${FFI_ASM_OBJ})
+	add_dependencies(${name} ffi_asm)    
 endfunction()
 
 
