@@ -146,10 +146,11 @@ void Classpath::BuildClassPath(dictionary* ini, char*** args, UINT& count)
         if (entry != NULL) {
             // Expand wildcards -> produces multiple entries
             ExpandClassPathEntry(entry, &entries, &entryCount);
+            i = 0;
         }
 
         i++;
-        if (entry == NULL)
+        if (i > 42 && entry == NULL)
             break;
     }
 
