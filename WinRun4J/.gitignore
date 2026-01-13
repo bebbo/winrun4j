@@ -1,2 +1,6 @@
 WinRun4J.ncb
 WinRun4J.suo
+.cproject
+.project
+build
+/Debug/

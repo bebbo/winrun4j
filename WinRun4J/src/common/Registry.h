@@ -13,6 +13,7 @@
 
 #include "Runtime.h"
 #include "INI.h"
+#include <jni.h>
 
 class Registry {
 public:

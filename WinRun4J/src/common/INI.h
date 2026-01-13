@@ -13,7 +13,6 @@
 
 #include "Runtime.h"
 #include "Dictionary.h"
-#include <jni.h>
 
 // Internal keys
 #define MODULE_NAME "WinRun4J:module.name"

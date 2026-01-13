@@ -29,8 +29,8 @@
 #define _GNU_SOURCE 1
 #endif
 
-#include "../common/Runtime.h"
-
+//#include "../common/Runtime.h"
+#include <windows.h>
 #include "ffi.h"
 #include "ffi_common.h"
 
@@ -571,7 +571,7 @@ ffi_closure_free (void *ptr)
     ptr = sub_segment_exec_offset (ptr, seg);
 #endif
 
-  ::VirtualFree(ptr, 0, MEM_RELEASE);
+  VirtualFree(ptr, 0, MEM_RELEASE);
   //free(ptr);
 }
 

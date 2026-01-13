@@ -15,7 +15,6 @@
 #include "DDE.h"
 #include <tlhelp32.h>
 #include <psapi.h>
-#include <shfolder.h>
 
 #define SINGLE_INSTANCE_OPTION ":single.instance"
 

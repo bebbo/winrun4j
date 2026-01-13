@@ -22,7 +22,7 @@ static jmethodID CLASS_GETCTORS_METHOD;
 
 // The java code for the EmbeddedClassLoader - used to load classes
 // from jars embedded inside executabless
-#include "EmbeddedClasses.cpp"
+#include "EmbeddedClasses.hpp"
 
 void JNI::Init(JNIEnv* env)
 {

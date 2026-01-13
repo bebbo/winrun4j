@@ -1,0 +1,6 @@
+== Build Me ==
+
+ cmake -B build32 -A Win32 -DJAVA_HOME="%JAVA_HOME%" ..
+ cmake --build build32 --config Release
+
+ 

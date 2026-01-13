@@ -322,6 +322,7 @@ extern "C" char * _cdecl strrev(char *str)
 	return str;
 }
 
+#if _MSC_VER < 1400  /* or some suitable cutoff for old MSVC */
 extern "C" char * _cdecl strdup(const char *str)
 {
     char *r;
@@ -334,6 +335,7 @@ extern "C" char * _cdecl _strdup(const char *src)
 {
 	return strdup(src);
 }
+#endif
 
 extern "C" void __cdecl _wassert(int e)
 {

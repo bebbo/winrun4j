@@ -247,17 +247,26 @@ ffi_status ffi_prep_cif_machdep(ffi_cif *cif)
 }
 
 #ifdef X86_WIN64
+#  ifdef __cplusplus
 extern "C" int
+#  else
+extern int
+#  endif
 ffi_call_win64(void (*)(char *, extended_cif *), extended_cif *,
                unsigned, unsigned, unsigned *, void (*fn)(void));
 #elif defined(X86_WIN32)
+#  ifdef __cplusplus
 extern "C" void
+#  else
+extern void
+#  endif
 ffi_call_win32(void (*)(char *, extended_cif *), extended_cif *,
                unsigned, unsigned, unsigned *, void (*fn)(void));
 #else
 extern void ffi_call_SYSV(void (*)(char *, extended_cif *), extended_cif *,
                           unsigned, unsigned, unsigned *, void (*fn)(void));
 #endif
+
 
 void ffi_call(ffi_cif *cif, void (*fn)(void), void *rvalue, void **avalue)
 {
@@ -339,7 +348,9 @@ void ffi_call(ffi_cif *cif, void (*fn)(void), void *rvalue, void **avalue)
    on MSVC - standard cdecl convention applies. */
 static void ffi_prep_incoming_args_SYSV (char *stack, void **ret,
                                          void** args, ffi_cif* cif);
+#ifdef __cpluplus
 extern "C" {
+#endif
 void FFI_HIDDEN ffi_closure_SYSV (ffi_closure *)
      __attribute__ ((regparm(1)));
 unsigned int FFI_HIDDEN ffi_closure_SYSV_inner (ffi_closure *, void **, void *)
@@ -355,7 +366,9 @@ void FFI_HIDDEN ffi_closure_win64 (ffi_closure *);
 void * FFI_HIDDEN
 ffi_closure_win64_inner (ffi_closure *closure, void *args);
 #endif
+#ifdef __cpluplus
 }
+#endif
 
 /* This function is jumped to by the trampoline */
 
