@@ -210,10 +210,50 @@ jint Native::FFIPrepare(JNIEnv* /*env*/, jobject /*self*/, jlong cif, jint abi, 
 {
 	return ffi_prep_cif((ffi_cif *) cif, (ffi_abi) abi, nargs, (ffi_type *) rtype, (ffi_type **) atypes);
 }
+#if 0
+static void dump_cif(ffi_cif *cif, void **avalue) {
+    fprintf(stderr, "ffi_cif @%p\n", (void*)cif);
+    if (!cif) return;
+    fprintf(stderr, "  abi    = %d\n", cif->abi);
+    fprintf(stderr, "  nargs  = %u\n", cif->nargs);
+    fprintf(stderr, "  bytes  = %u\n", cif->bytes);
+    fprintf(stderr, "  flags  = %u\n", cif->flags);
+    fprintf(stderr, "  rtype  = %d size=%zu\n",
+            cif->rtype ? cif->rtype->type : -1,
+            cif->rtype ? cif->rtype->size : 0);
 
-void Native::FFICall(JNIEnv* /*env*/, jobject /*self*/, jlong cif, jlong fn, jlong rvalue, jlong avalue)
+    for (unsigned i = 0; i < cif->nargs; ++i) {
+        ffi_type *t = cif->arg_types[i];
+        fprintf(stderr, "  arg_type[%u]: type=%d size=%zu\n",
+                i, t ? t->type : -1, t ? t->size : 0);
+        if (avalue && avalue[i]) {
+            unsigned long long v = *(unsigned long long*)avalue[i];
+            fprintf(stderr, "    arg[%u] ptr=%p val=0x%016llx\n",
+                    i, avalue[i], v);
+        } else {
+            fprintf(stderr, "    arg[%u] ptr=%p\n",
+                    i, avalue ? avalue[i] : NULL);
+        }
+    }
+}
+#endif
+
+void Native::FFICall(JNIEnv*, jobject,
+                     jlong cif, jlong fn, jlong rvalue, jlong avalue)
 {
-	ffi_call((ffi_cif *) cif, (void (__cdecl *)(void)) fn, (void *) rvalue, (void **) avalue);
+    ffi_cif *pcif = (ffi_cif*)cif;
+    void   **args = (void**)avalue;
+
+#if 0
+    fprintf(stderr, "FFICall: cif=%p fn=%p rvalue=%p avalue=%p\n",
+            pcif, (void*)fn, (void*)rvalue, (void*)avalue);
+
+    dump_cif(pcif, args);
+#endif
+    ffi_call(pcif,
+             (void (*)(void))fn,
+             (void*)rvalue,
+             args);
 }
 
 typedef struct {

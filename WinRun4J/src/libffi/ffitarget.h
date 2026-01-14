@@ -38,9 +38,9 @@
 
 #ifdef X86_WIN64
 #define FFI_SIZEOF_ARG 8
-#define USE_BUILTIN_FFS 0 // not yet implemented in mingw-64 
+#define USE_BUILTIN_FFS 0 // not yet implemented in mingw-64
+#undef X86_WIN32
 #endif
-
 /* ---- Generic type definitions ----------------------------------------- */
 
 #ifndef LIBFFI_ASM
@@ -72,6 +72,7 @@ typedef enum ffi_abi {
   FFI_WIN64,
   FFI_DEFAULT_ABI = FFI_WIN64,
 #else
+
 
   /* ---- Intel x86 and AMD x86-64 - */
 #if !defined(X86_WIN32) && (defined(__i386__) || defined(__x86_64__) || defined(__i386) || defined(__amd64))

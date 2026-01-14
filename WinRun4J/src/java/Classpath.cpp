@@ -82,13 +82,16 @@ static void ExpandClassPathEntry(char* arg, char*** result, int* count)
                         fullpath[prev] = 0;
 
                     strcpy_s(search, fullpath);
+
                     if (prev != 0)
                         fullpath[prev] = '\\';
 
                     strcat_s(search, "\\");
                     strcat_s(search, fd.cFileName);
 
-                    if (i < len - 1) {
+                    // Only append remainder if it contains NO wildcard
+                    if (i < len - 1 && strchr(fullpath + i + 1, '*') == NULL) {
+
                         HANDLE h2 = FindFirstFileA(search, &fdcheck);
                         if (h2 != INVALID_HANDLE_VALUE) {
                             bool isDir = (fdcheck.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
@@ -136,46 +139,51 @@ void Classpath::BuildClassPath(dictionary* ini, char*** args, UINT& count)
     char** entries = NULL;
     int    entryCount = 0;
 
-    char entryName[MAX_PATH];
-    int i = 0;
+    int max = dictionary_find_max(ini, CLASS_PATH);
+    for (int i = 0; i <= max; i++) {
+        char entryName[MAX_PATH];
+        _snprintf_s(entryName, MAX_PATH, _TRUNCATE, "%s.%d", CLASS_PATH, i);
 
-    while (true) {
-        _snprintf_s(entryName, MAX_PATH, _TRUNCATE, "%s.%d", CLASS_PATH, i + 1);
         char* entry = iniparser_getstr(ini, entryName);
+        if (!entry)
+            continue;
 
-        if (entry != NULL) {
-            // Expand wildcards -> produces multiple entries
-            ExpandClassPathEntry(entry, &entries, &entryCount);
-            i = 0;
-        }
-
-        i++;
-        if (i > 42 && entry == NULL)
-            break;
+        ExpandClassPathEntry(entry, &entries, &entryCount);
     }
 
-    // Build final classpath string
+    // entries[] contains entryCount strings
+    // Build: "entry1;entry2;entry3;..."
+
     char* classpath = NULL;
 
+    /* -------------------------------
+       1) Compute total length needed
+       ------------------------------- */
+    size_t totalLen = 0;
+
     for (int j = 0; j < entryCount; j++) {
+        totalLen += strlen(entries[j]);
+        if (j < entryCount - 1)
+            totalLen += 1;   // semicolon
+    }
 
-        size_t newLen =
-            (classpath ? strlen(classpath) + 1 : 0) +
-            strlen(entries[j]) + 1;
+    totalLen += 1; // null terminator
 
-        char* temp = (char*)malloc(newLen + 1);
-        temp[0] = 0;
+    /* -------------------------------
+       2) Allocate and copy
+       ------------------------------- */
+    classpath = (char*)malloc(totalLen);
+    if (!classpath)
+        return; // handle OOM
 
-        if (classpath) {
-            strcat_s(temp, newLen + 1, classpath);
-            strcat_s(temp, newLen + 1, ";");
-            free(classpath);
-        }
+    classpath[0] = 0; // start empty
 
-        strcat_s(temp, newLen + 1, entries[j]);
-        classpath = temp;
+    for (int j = 0; j < entryCount; j++) {
+        strcat_s(classpath, totalLen, entries[j]);
+        if (j < entryCount - 1)
+            strcat_s(classpath, totalLen, ";");
 
-        free(entries[j]);
+        free(entries[j]); // free original entry
     }
 
     free(entries);
@@ -183,10 +191,18 @@ void Classpath::BuildClassPath(dictionary* ini, char*** args, UINT& count)
     char* built = _strdup(classpath ? classpath : "");
     free(classpath);
 
-    // Log truncated classpath
-    char argl[MAX_LOG_LENGTH - 100];
-    StrTruncate(argl, built, MAX_LOG_LENGTH - 100);
-    Log::Info("Generated Classpath: %s", argl);
+	size_t len = strlen(built);
+	size_t pos = 0;
+	const int log_chunk = MAX_LOG_LENGTH - 100;
+	while (pos < len) {
+		char buf[log_chunk + 1];
+		size_t remaining = len - pos;
+		size_t chunk = remaining < log_chunk ? remaining : log_chunk;
+		memcpy(buf, built + pos, chunk);
+		buf[chunk] = '\0';
+		Log::Info("Generated Classpath: %s", buf);
+		pos += chunk;
+	}
 
     // Build final -cp argument
     size_t cpLen = strlen(built) + strlen(CLASS_PATH_ARG) + 2;

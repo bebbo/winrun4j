@@ -30,7 +30,7 @@
 
 #if !defined(__x86_64__) || defined(_WIN64)
 
-#ifdef _WIN64
+#if defined(X86_WIN64) || defined(X86_WIN32)
 #include <windows.h>
 #endif
 
@@ -231,7 +231,7 @@ ffi_status ffi_prep_cif_machdep(ffi_cif *cif)
     {
       if (((*ptr)->alignment - 1) & cif->bytes)
         cif->bytes = ALIGN(cif->bytes, (*ptr)->alignment);
-      cif->bytes += ALIGN((*ptr)->size, FFI_SIZEOF_ARG);
+      cif->bytes += (unsigned) ALIGN((*ptr)->size, FFI_SIZEOF_ARG);
     }
 
 #ifdef X86_WIN64
@@ -348,7 +348,7 @@ void ffi_call(ffi_cif *cif, void (*fn)(void), void *rvalue, void **avalue)
    on MSVC - standard cdecl convention applies. */
 static void ffi_prep_incoming_args_SYSV (char *stack, void **ret,
                                          void** args, ffi_cif* cif);
-#ifdef __cpluplus
+#ifdef __cplusplus
 extern "C" {
 #endif
 void FFI_HIDDEN ffi_closure_SYSV (ffi_closure *)
@@ -366,7 +366,7 @@ void FFI_HIDDEN ffi_closure_win64 (ffi_closure *);
 void * FFI_HIDDEN
 ffi_closure_win64_inner (ffi_closure *closure, void *args);
 #endif
-#ifdef __cpluplus
+#ifdef __cplusplus
 }
 #endif
 
@@ -537,6 +537,17 @@ ffi_prep_incoming_args_SYSV(char *stack, void **rvalue, void **avalue,
    *(unsigned short*)  &__tramp[11] = 0; /* ret __size  */ \
  }
 
+#if 0
+static void dump_trampoline(ffi_closure* closure) {
+    unsigned char *t = (unsigned char*)closure->tramp;
+    fprintf(stderr, "C: tramp @%p = ", t);
+    for (int i = 0; i < FFI_TRAMPOLINE_SIZE; ++i)
+        fprintf(stderr, "%02x ", t[i]);
+    fprintf(stderr, "\n");
+    fprintf(stderr, "C: &ffi_closure_win64_wr4j = %p\n", (void*)&ffi_closure_win64);
+}
+#endif
+
 /* the cif must already be prep'ed */
 
 ffi_status
@@ -546,16 +557,23 @@ ffi_prep_closure_loc (ffi_closure* closure,
                       void *user_data,
                       void *codeloc)
 {
+	UNREFERENCED_PARAMETER(codeloc);
+
 #ifdef X86_WIN64
 #define ISFLOAT(IDX) (cif->arg_types[IDX]->type == FFI_TYPE_FLOAT || cif->arg_types[IDX]->type == FFI_TYPE_DOUBLE)
 #define FLAG(IDX) (cif->nargs>(IDX)&&ISFLOAT(IDX)?(1<<(IDX)):0)
+
   if (cif->abi == FFI_WIN64) 
     {
       int mask = FLAG(0)|FLAG(1)|FLAG(2)|FLAG(3);
-      FFI_INIT_TRAMPOLINE_WIN64 (&closure->tramp[0],
-                                 &ffi_closure_win64,
-                                 codeloc, mask);
+      FFI_INIT_TRAMPOLINE_WIN64( &closure->tramp[0],
+    		  (void*)&ffi_closure_win64, // FUN -> 0x7ff7...
+			  closure,                 // CTX -> 0x0000023B98A50000
+			  mask );
       /* make sure we can execute here */
+#if 0			  
+      dump_trampoline(closure);
+#endif      
     }
 #else
   if (cif->abi == FFI_SYSV)
@@ -586,8 +604,11 @@ ffi_prep_closure_loc (ffi_closure* closure,
 }
 
 /* ------- Native raw API support -------------------------------- */
+#if (defined(X86_WIN32) || defined(X86_WIN64)) && !defined(FFI_NO_RAW_API)
+#define FFI_NO_RAW_API 1
+#endif
 
-#if !FFI_NO_RAW_API
+#if !defined(FFI_NO_RAW_API)
 
 ffi_status
 ffi_prep_raw_closure_loc (ffi_raw_closure* closure,

@@ -1,5 +1,13 @@
 ## Change History
 
+### 0.4.6
+
+* use cmake to build the executables for windows
+* remove classpath/vmargs limit
+* improved ini loading, key iteration
+* log both full
+* fix 64 bit: use setPointer instead of setInt
+
 ### 0.4.5
 
 * Allow vmargs and INI overrides on the commandline (-D, -X, -W)

@@ -98,12 +98,15 @@ public class FFI
 
         public static CIF prepare(int abi, int[] types) {
             CIF c = new CIF();
-            int sizeOfCif = 30;
+            int sizeOfCif = 32;
             c.cif = Native.malloc(sizeOfCif);
+
             c.ffi_types = new long[types.length];
             for (int i = 0; i < types.length; i++)
                 c.ffi_types[i] = makeType(types[i]);
+
             c.return_type = makeType(FFI_TYPE_POINTER);
+
             int argSize = (types.length + 1) * NativeHelper.PTR_SIZE;
             c.atypes = Native.malloc(argSize);
             ByteBuffer ab = NativeHelper.getBuffer(c.atypes, argSize);
@@ -117,6 +120,7 @@ public class FFI
                 ab.putLong(0);
             else
                 ab.putInt(0);
+
             int res = FFI.prepare(c.cif, abi, types.length, c.return_type, c.atypes);
             if (res != 0) {
                 NativeHelper.free(c.cif, c.return_type, c.atypes);

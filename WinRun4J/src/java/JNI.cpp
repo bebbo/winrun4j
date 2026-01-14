@@ -113,6 +113,7 @@ int JNI::RunMainClass(JNIEnv* env, TCHAR* mainClassStr, int argc, char* argv[])
         return 8;
     }
 
+    Log::Info("calling main");
     env->CallStaticVoidMethod(mainClass, mainMethod, args);
 
     PrintStackTrace(env);

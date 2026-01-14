@@ -489,7 +489,7 @@ void parse_line(char *sec, char *lin, dictionary *d)
     if (*wher == ';' || *wher == '#' || *wher == 0)
         return; /* Comment lines */
     else {
-    	if (sscanf_s(wher, "[%[^]]", sec, (unsigned)sizeof(sec)) == 1) {
+    	if (sscanf_s(wher, "[%[^]]", sec, ASCIILINESZ + 1 /*sizeof sec buffer*/) == 1) {
     	    iniparser_add_entry(d, sec, NULL, NULL);
     	}
     	else if (sscanf_s(wher,
@@ -605,10 +605,8 @@ int dictionary_find_max(dictionary* d, const char* keyName)
         if (idx > maxIndex)
             maxIndex = (int)idx;
     }
-printf("maxIndex = %d\n", maxIndex);
     return maxIndex;
 }
-
 
 void iniparser_freedict(dictionary *d)
 {

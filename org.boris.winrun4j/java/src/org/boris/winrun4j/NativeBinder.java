@@ -1,4 +1,3 @@
-/*******************************************************************************
  * This program and the accompanying materials
  * are made available under the terms of the Common Public License v1.0
  * which accompanies this distribution, and is available at 
@@ -324,7 +323,7 @@ public class NativeBinder
                                 sptr = Native.malloc(value);
                             }
                             if (sptr != 0)
-                                NativeHelper.setInt(avalue + (i - 1) * NativeHelper.PTR_SIZE, (int) sptr);
+                                NativeHelper.setPointer(avalue + (i - 1) * NativeHelper.PTR_SIZE, sptr);
                         }
                     }
                     break;

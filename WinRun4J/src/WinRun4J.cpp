@@ -188,10 +188,20 @@ int WinRun4J::StartVM(dictionary* ini)
     if (vmargsCount > 0)
         Log::Info("VM Args:");
 
-    char argl[MAX_PATH];
+    const int log_chunk = MAX_LOG_LENGTH - 100;
     for (UINT i = 0; i < vmargsCount; i++) {
-        StrTruncate(argl, vmargs[i], MAX_PATH);
-        Log::Info("vmarg.%d=%s", i, argl);
+		char const * text = vmargs[i];
+		size_t len = strlen(text);
+		size_t pos = 0;
+		while (pos < len) {
+			char buf[log_chunk + 1];
+			size_t remaining = len - pos;
+			size_t chunk = remaining < log_chunk ? remaining : log_chunk;
+			memcpy(buf, text + pos, chunk);
+			buf[chunk] = '\0';
+			Log::Info("vmarg.%d=%s", i, buf);
+			pos += chunk;
+		}
     }
 
     vmargs[vmargsCount] = NULL;

@@ -320,10 +320,7 @@ void Log::Close()
     }
 }
 
-extern "C" __declspec(dllexport) void Log_LogIt(int level, const char* marker, const char* format, ...)
+extern "C" __declspec(dllexport) void Log_LogIt(int level, const char* marker, const char* format)
 {
-    va_list args;
-    va_start(args, format);
-    Log::LogIt((LoggingLevel)level, marker, format, args);
-    va_end(args);
+    Log::LogIt((LoggingLevel)level, marker, format, nullptr);
 }

@@ -17,8 +17,12 @@ set(CMAKE_CXX_FLAGS_MINSIZEREL "/EHs- /EHc-" CACHE STRING "" FORCE)
 # ------------------------------------------------------------
 include(cmake/flags-common.cmake)
 
-if(CMAKE_SIZEOF_VOID_P EQUAL 4)
-    include(cmake/flags-win32.cmake)
+# Architecture-specific C preprocessor defines (visible to ALL C/C++ sources) 
+if(CMAKE_SIZEOF_VOID_P EQUAL 4) 
+	include(cmake/flags-win32.cmake) 
+	add_compile_definitions(X86_WIN32) 
+else() 
+	add_compile_definitions(X86_WIN64) 
 endif()
 
 # ------------------------------------------------------------
@@ -128,9 +132,14 @@ function(add_launcher name subsystem)
         ${JAVA_HOME}/include/win32
     )
 
-    target_link_libraries(${name} PRIVATE
-        psapi.lib user32.lib ole32.lib olepro32.lib advapi32.lib gdi32.lib
-    )
+	target_link_libraries(${name} PRIVATE
+	    psapi.lib user32.lib ole32.lib advapi32.lib gdi32.lib
+	)
+	
+	# olepro32.lib exists only for 32-bit builds
+	if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+	    target_link_libraries(${name} PRIVATE olepro32.lib)
+	endif()
 
     target_link_options(${name} PRIVATE /SUBSYSTEM:${subsystem})
 
@@ -164,15 +173,16 @@ function(add_rcedit name)
 endfunction()
 
 # ------------------------------------------------------------
-# Build all six executables
+# Build executables matching the selected architecture
 # ------------------------------------------------------------
-# Win32
-add_launcher(WinRun4J WINDOWS)
-add_launcher(WinRun4Jc CONSOLE)
-add_rcedit(RCEDIT)
-
-# x64
-add_launcher(WinRun4J64 WINDOWS)
-add_launcher(WinRun4J64c CONSOLE)
-add_rcedit(RCEDIT64)
-
+if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+    # 32-bit build
+    add_launcher(WinRun4J WINDOWS)
+    add_launcher(WinRun4Jc CONSOLE)
+    add_rcedit(RCEDIT)
+else()
+    # 64-bit build
+    add_launcher(WinRun4J64 WINDOWS)
+    add_launcher(WinRun4J64c CONSOLE)
+    add_rcedit(RCEDIT64)
+endif()

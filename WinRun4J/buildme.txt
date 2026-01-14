@@ -1,6 +1,8 @@
-== Build Me ==
+rem == Build Me ==
+rem From Developer command prompt:
 
- cmake -B build32 -A Win32 -DJAVA_HOME="%JAVA_HOME%" ..
- cmake --build build32 --config Release
+cd build
+cmake -B build32 -A Win32 -DJAVA_HOME="%JAVA_HOME%" ..
+cmake --build build32 --config Release
+cmake --build build64 --config Release
 
- 

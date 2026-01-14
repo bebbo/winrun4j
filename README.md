@@ -162,3 +162,143 @@ Note:
 * The embedded INI entries are overwridden by an external INI file (if present).
 * Any JARs added to the executable will automatically be added to the classpath (before all classpath entries specified in the INI file and in the order in which they are embedded). They don't need to be specified in the INI file.
 * If an embedded splash image is present it will automatically appear (it doesn't need to be specified in the INI file).
+
+
+## 🛠️ Building
+WinRun4J builds cleanly with Visual Studio and a JDK installed.
+All commands assume you are using a Developer **Command Prompt for Visual Studio**, which ensures the correct MSVC environment variables and toolchain paths are active.
+
+### 1. Prepare the build directory
+
+```
+mkdir WinRun4J\build
+cd WinRun4J\build
+```
+Keeping generated files out of the source tree keeps the project tidy and avoids committing build artifacts.
+
+### 2. Configure the CMake project
+Generate a Visual Studio solution:
+
+```
+cmake -B build32 -A Win32 -DJAVA_HOME="%JAVA_HOME%" ..
+```
+Notes:
+
+- A Win32 selects the 32-bit toolchain (matching the original WinRun4J launcher).
+- JAVA_HOME must point to a valid JDK installation.
+- The .. refers to the project root containing CMakeLists.txt.
+
+To generate a 64-bit build:
+
+```
+cmake -B build64 -A x64 -DJAVA_HOME="%JAVA_HOME%" ..
+```
+
+### 3. Build the launcher
+
+```
+cmake --build build32 --config Release
+```
+CMake invokes MSBuild with the correct configuration and produces the final executables.
+
+To generate a 64-bit versions:
+
+```
+cmake --build build64 --config Release
+```
+
+### 4. Locate the output
+The compiled binaries are placed under:
+
+```
+WinRun4J\build\WinRun4J-\Release
+```
+
+Depending on your configuration, you will find:
+
+- WinRun4J.exe (console launcher)
+- WinRun4J64.exe (64-bit launcher)
+- WinRun4JService.exe (service launcher)
+- WinRun4JService64.exe (64-bit service launcher)
+- WinRun4J.exe (console launcher)
+- WinRun4J64.exe (64-bit launcher)
+- RCEDIT.exe (resource editor)
+- RCEDIT64.exe (64-bit resource editor)
+
+## 📦 Building `WinRun4J.jar`
+
+The Java portion of WinRun4J lives under:
+
+```
+org.boris.winrun4j/
+    java/src/org/boris/winrun4j/
+    META-INF/MANIFEST.MF
+```
+
+This contains the full Java API used by the native launcher.
+A standard JDK (8 or later) is all you need to build the JAR.
+
+### 1. Navigate to the Java project directory
+From the repository root:
+
+```
+cd org.boris.winrun4j
+```
+
+The structure looks like:
+
+```
+org.boris.winrun4j
+├── java
+│   └── src
+│       └── org
+│           └── boris
+│               └── winrun4j
+└── META-INF
+    └── MANIFEST.MF
+```
+
+### 2. Compile the Java sources
+Create an output directory:
+
+```
+mkdir out
+```
+Compile all Java files:
+
+```
+javac -d out java\src\org\boris\winrun4j\**\*.java
+```
+This produces .class files under:
+
+```
+out\org\boris\winrun4j\
+```
+
+### 3. Package the JAR
+From inside org.boris.winrun4j:
+
+```
+jar cfm WinRun4J.jar META-INF\MANIFEST.MF -C out .
+```
+Notes:
+
+- `META-INF\MANIFEST.MF` is included in the repository and contains the correct metadata.
+- `-C out .` packages all compiled classes from the out directory.
+
+The resulting file:
+
+```
+WinRun4J.jar
+```
+is the Java companion library required by the native WinRun4J launcher.
+
+### 4. Using the JAR
+Place WinRun4J.jar next to your launcher EXE or include it in your application’s classpath.
+
+Example in your INI:
+
+```
+classpath.1=WinRun4J.jar
+classpath.2=yourapp.jar
+```

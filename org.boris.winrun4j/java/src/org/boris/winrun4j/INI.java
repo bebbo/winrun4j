@@ -83,8 +83,15 @@ public class INI
      */
     public static String[] getPropertyKeys() {
         long d = NativeHelper.call(0, "INI_GetDictionary");
+        if (d == 0) {
+            return new String[0];
+        }
+
         int n = NativeHelper.getInt(d);
-        long keyPtr = NativeHelper.getInt(d + (Native.IS_64 ? 16 : 12));
+
+        // keyPtr is a *pointer* to char** key; use pointer-sized read
+        long keyPtr = NativeHelper.getPointer(d + (Native.IS_64 ? 16 : 12));
+
         String[] res = new String[n];
         for (int i = 0, offset = 0; i < n; i++, offset += NativeHelper.PTR_SIZE) {
             long ptr = NativeHelper.getPointer(keyPtr + offset);

@@ -60,6 +60,7 @@ extern "C" {
 #ifdef X64
 #ifndef X86_WIN64
 #define X86_WIN64
+#undef  X86_WIN32
 #endif
 #else
 #ifndef X86_WIN32

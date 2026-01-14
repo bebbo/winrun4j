@@ -88,7 +88,7 @@ static ffi_status initialize_aggregate(ffi_type *arg)
 ffi_status ffi_prep_cif(ffi_cif *cif, ffi_abi abi, unsigned int nargs,
 			ffi_type *rtype, ffi_type **atypes)
 {
-  unsigned bytes = 0;
+  size_t bytes = 0;
   unsigned int i;
   ffi_type **ptr;
 
@@ -149,7 +149,7 @@ ffi_status ffi_prep_cif(ffi_cif *cif, ffi_abi abi, unsigned int nargs,
 #endif
     }
 
-  cif->bytes = bytes;
+  cif->bytes = (unsigned)bytes;
 
   /* Perform machine dependent cif processing */
   return ffi_prep_cif_machdep(cif);

@@ -382,7 +382,7 @@ typedef struct
     ResourceInfo* ri;
 } ResourceInfoList;
 
-BOOL EnumLangsFunc(HANDLE hModule, LPCTSTR lpType, LPCTSTR lpName, WORD wLang, LONG lParam)
+BOOL EnumLangsFunc(HANDLE hModule, LPCTSTR lpType, LPCTSTR lpName, WORD wLang, LONG_PTR lParam)
 {
 	UNREFERENCED_PARAMETER(hModule);
 
@@ -401,7 +401,7 @@ BOOL EnumLangsFunc(HANDLE hModule, LPCTSTR lpType, LPCTSTR lpName, WORD wLang, L
     return pRil->count < pRil->max;
 }
 
-BOOL EnumNamesFunc(HANDLE hModule, LPCTSTR lpType, LPTSTR lpName, LONG lParam)
+BOOL EnumNamesFunc(HANDLE hModule, LPCTSTR lpType, LPTSTR lpName, LONG_PTR lParam)
 {
     return EnumResourceLanguages(
         (HMODULE)hModule,
@@ -412,7 +412,7 @@ BOOL EnumNamesFunc(HANDLE hModule, LPCTSTR lpType, LPTSTR lpName, LONG lParam)
     );
 }
 
-BOOL EnumTypesFunc(HANDLE hModule, LPTSTR lpType, LONG lParam)
+BOOL EnumTypesFunc(HANDLE hModule, LPTSTR lpType, LONG_PTR lParam)
 {
     return EnumResourceNames(
         (HMODULE)hModule,
@@ -487,9 +487,9 @@ bool Resource::ListResources(LPSTR exeFile)
         LPCTSTR lpName = ril.ri[i].lpName;
 
         if (lpType == RT_GROUP_ICON) {
-            printf("Group Icon\t%04x\n", (UINT_PTR)lpName);
+            printf("Group Icon\t%p\n", lpName);
         } else if (lpType == RT_ICON) {
-            printf("Icon      \t%04x\n", (UINT_PTR)lpName);
+            printf("Icon      \t%p\n", lpName);
         } else if (lpType == RT_JAR_FILE) {
             HRSRC h = FindResourceA(hMod, lpName, lpType);
             HGLOBAL hg = LoadResource(hMod, h);
@@ -499,52 +499,52 @@ bool Resource::ListResources(LPSTR exeFile)
             if (*pd == JAR_RES_MAGIC) {
                 printf("JAR File  \t%s\n", (char*)&pb[RES_MAGIC_SIZE]);
             } else {
-                printf("Unknown   \t%04x, %04x\n", (UINT_PTR)lpType, (UINT_PTR)lpName);
+                printf("Unknown   \t%p, %p\n", lpType, lpName);
             }
         } else if (lpType == RT_INI_FILE) {
             printf("INI File\n");
         } else if (lpType == RT_SPLASH_FILE) {
             printf("Splash File\n");
         } else if (lpType == RT_ACCELERATOR) {
-            printf("Accelerator\t%04x\n", (UINT_PTR)lpName);
+            printf("Accelerator\t%p\n", lpName);
         } else if (lpType == RT_ANICURSOR) {
-            printf("Ani Cursor\t%04x\n", (UINT_PTR)lpName);
+            printf("Ani Cursor\t%p\n", lpName);
         } else if (lpType == RT_ANIICON) {
-            printf("Ani Icon\t%04x\n", (UINT_PTR)lpName);
+            printf("Ani Icon\t%p\n", lpName);
         } else if (lpType == RT_BITMAP) {
-            printf("Bitmap\t%04x\n", (UINT_PTR)lpName);
+            printf("Bitmap\t%p\n", lpName);
         } else if (lpType == RT_CURSOR) {
-            printf("Cursor\t%04x\n", (UINT_PTR)lpName);
+            printf("Cursor\t%p\n", lpName);
         } else if (lpType == RT_DIALOG) {
-            printf("Dialog\t%04x\n", (UINT_PTR)lpName);
+            printf("Dialog\t%p\n", lpName);
         } else if (lpType == RT_DLGINCLUDE) {
-            printf("Dialog Include\t%04x\n", (UINT_PTR)lpName);
+            printf("Dialog Include\t%p\n", lpName);
         } else if (lpType == RT_FONT) {
-            printf("Font\t%04x\n", (UINT_PTR)lpName);
+            printf("Font\t%p\n", lpName);
         } else if (lpType == RT_FONTDIR) {
-            printf("Font Dir\t%04x\n", (UINT_PTR)lpName);
+            printf("Font Dir\t%p\n", lpName);
         } else if (lpType == RT_HTML) {
             printf("HTML\t\t%s\n", (char*)lpName);
         } else if (lpType == RT_GROUP_CURSOR) {
-            printf("Group Cursor\t%04x\n", (UINT_PTR)lpName);
+            printf("Group Cursor\t%p\n", lpName);
         } else if (lpType == RT_MANIFEST) {
-            printf("Manifest\t%04x\n", (UINT_PTR)lpName);
+            printf("Manifest\t%p\n", lpName);
         } else if (lpType == RT_MENU) {
-            printf("Menu\t%04x\n", (UINT_PTR)lpName);
+            printf("Menu\t%p\n", lpName);
         } else if (lpType == RT_MESSAGETABLE) {
-            printf("Message Table\t%04x\n", (UINT_PTR)lpName);
+            printf("Message Table\t%p\n", lpName);
         } else if (lpType == RT_PLUGPLAY) {
-            printf("Plug Play\t%04x\n", (UINT_PTR)lpName);
+            printf("Plug Play\t%p\n", lpName);
         } else if (lpType == RT_RCDATA) {
-            printf("RC Data\t%04x\n", (UINT_PTR)lpName);
+            printf("RC Data\t%p\n", lpName);
         } else if (lpType == RT_STRING) {
-            printf("String\t%04x\n", (UINT_PTR)lpName);
+            printf("String\t%p\n", lpName);
         } else if (lpType == RT_VERSION) {
-            printf("Version\t%04x\n", (UINT_PTR)lpName);
+            printf("Version\t%p\n", lpName);
         } else if (lpType == RT_VXD) {
-            printf("VXD\t%04x\n", (UINT_PTR)lpName);
+            printf("VXD\t%p\n", lpName);
         } else {
-            printf("Unknown   \t%04x, %04x\n", (UINT_PTR)lpType, (UINT_PTR)lpName);
+            printf("Unknown   \t%p, %p\n", lpType, lpName);
         }
     }
 
